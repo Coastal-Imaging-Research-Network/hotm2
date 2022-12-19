@@ -1,0 +1,33 @@
+#!  /usr/bin/perl
+
+open( I, "</proc/sysvipc/msg" ) || die "canot open ipc: $!\n";
+
+$skip = shift or $skip = 1;
+
+print "skip: $skip\n";
+
+$j = <I>;
+
+while(<I>) {
+
+	($pid, $id, $rest) = split(' ');
+	print "$pid $id... ";
+	do { print "skipping\n"; next; } if hex($pid) < 20 and hex($pid) > 0 and $skip > 0;
+	system( "ipcrm -q $id" );
+	print "done\n";
+
+}
+
+open( I, "</proc/sysvipc/shm" ) || die "canot open ipc: $!\n";
+
+$j = <I>;
+
+while(<I>) {
+
+	($pid, $id, $rest) = split(' ');
+	print "$pid $id... ";
+	#do { print "skipping\n"; next; } unless $pid > 0;
+	system( "ipcrm -m $id" ) unless $pid > 0;;
+	print "done\n";
+
+}

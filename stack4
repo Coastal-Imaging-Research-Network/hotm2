@@ -1,0 +1,229 @@
+#!/usr/bin/perl
+
+# unpack a stack from the SGI :-)
+#   version 3 stacks only -- only from SGI
+#    and version 4, one based pixel counting with color flag
+#
+#  format: rasterfile header, then colormap, then,
+#          8 lines of header containing pixel locations and time mapping
+#          then "image", with 4 bytes MSC, 4bytes UST, data...
+
+# Usage: stack4 startrow numrows startpix numpix infile outfile
+#    or: stack4 infile
+#    or: stack4 startrow numrows pixlistfile infile outfile
+
+require "ctime.pl";
+
+&Usage() if $#ARGV<0;
+
+do {
+	$startrow = shift;
+	$numrows = shift || &Usage;
+	@ColumnList = &createColumnList;
+	$infile = shift || &Usage;
+	$outfile = shift || &Usage;
+} if $#ARGV > 1;
+
+do {
+	$startrow = -999;
+	$infile = shift;
+	$outfile = "/dev/null";
+} if $#ARGV == 0;
+
+$lasttick = 0;
+
+# handle compressed data input!
+if( $infile =~ /\.Z$/ ) {
+	open( IN, "gunzip -c $infile |") 
+		|| die "can't find compressed file $infile: $!\n";
+}
+else {
+	open( IN, $infile ) || die "Can't open input file: $!\n";
+}
+
+binmode IN;
+
+open( OUT, ">$outfile" ) || die "Can't open output file: $!\n";
+
+read( IN, $head, 32 );
+
+($magic, $width, $height, $depth, $length, $type, $map, $maplen) =
+	unpack( "N8", $head );
+
+$data = $width - 8;
+
+# skip the color map
+read( IN, $junk, $maplen );
+
+# create the unpack template based on columns to output
+$dataUnpackTemplate = &createUnpackTemplate;
+
+$template = "VCCCC" . $dataUnpackTemplate;
+$dataTemplate = "NN" . $dataUnpackTemplate;
+
+read( IN, $line, $width );
+($when, $cam, $gain, $offset, $version, @xl ) =
+	unpack( $template, $line );
+
+die "Can operate only on versions >3. This is version $version\n" 
+	if $version < 3;
+
+read( IN, $line, $width );
+($junk, $increment, $color, $lines1, $lines2, @xh) =
+	unpack( $template, $line );
+$lines = $lines2 * 256 | $lines1;
+
+read( IN, $line, $width );
+$tempfoo = "A8".$dataUnpackTemplate;
+($where, @yl ) = unpack( $tempfoo, $line );
+
+read( IN, $line, $width );
+($pixfile, @yh) = unpack( $tempfoo, $line );
+
+while( $#xl >= 0 ) {
+	push @x, (shift(@xh)*256 | shift(@xl));
+	push @y, (shift(@yh)*256 | shift(@yl));
+}
+
+read( IN, $line, $width );
+($ust1, $ust2, $fullAOIname) = unpack( "NNA128", $line );
+$syncUST = ($ust1*(2**32))/1000000000 + $ust2/1000000000; 
+
+read( IN, $line, $width );
+($tvSeconds, $tvMicros) = unpack( "NN", $line );
+$syncTime = $tvSeconds + $tvMicros/1000000;
+
+read( IN, $line, $width );
+read( IN, $line, $width );
+
+do {
+	print "File:  $infile\n";
+	print "Lines: $height\n";
+	print "Images: $lines\n";
+	print "Bytes/line:  $width\n";
+	print "Pixels/line: $data\n";
+	print "PixelFile: $pixfile\n";
+	print "FullPixelName: $fullAOIname\n";
+	print "Site: $where\n";
+	print "Started: ($when) ".&ctime($when);
+	print "Sync time: ($syncTime) " .&ctime($syncTime);
+	print "UST: $syncUST (ms)\n";
+	print "FrameInc: $increment\n";
+	print "Camera: $cam\n";
+	print "Color (1=yes): $color\n" if $version >= 3;
+	print "PixelList: \n";
+	while( $#x >= 0 ) {
+		$x1 = shift(@x);
+		$y1 = shift(@y);
+		print "$x1 $y1\n";
+	}
+	exit;
+} if $startrow == -999;
+
+print "Input file $infile has $height lines of $width bytes \n";
+print "   with $data pixels per line from $lines images.\n";
+print "Site: $where, started at: ".&ctime($when);
+print "Taken at $increment frame increment, on camera $cam\n";
+print "Using pixelfile $fullAOIname with ", $#x+1, " pixels\n";
+#while( $#x >= 0 ) {
+#	$x1 = shift(@x);
+#	$y1 = shift(@y);
+#	print "($x1,$y1) ";
+#}
+#print "\n";
+
+$linecount = 1;
+
+# ok, I have a UST in micros and system time in microseconds at one point in
+# time. I get UST in milliseconds from each line. If I subtract UST from
+# system time, I get system time at boot. Then add UST from each line to get
+# real time at frame.
+
+$timeAtBoot = $syncTime - $syncUST;
+
+while( $width == read( IN, $line, $width) ) {
+
+	($ust, $msc, @ary) =
+		unpack( $dataTemplate, $line );
+
+	$ust = $ust / 1000;
+
+	$lastUST = $ust if $lastUST == 0;
+	$diffUST = $ust - $lastUST;
+	$lastUST = $ust;
+
+	$lastMSC = $msc if $lastMSC == 0;
+	$diffMSC = $msc - $lastMSC;
+	$lastMSC = $msc;
+
+	next if $linecount++ < $startrow;
+
+	$ust += $timeAtBoot;
+	$ustMod = int($ust) % 3600 + ($ust - int($ust));
+
+	do {
+		$gain = int($msc/65536);
+		$shutter = int($msc%65536);
+		printf OUT ("%.3f %.3f %d %d %.3f ", $ust, $diffUST, $gain, $shutter, $ustMod );
+	} if $version == 6;
+
+	printf OUT ("%.3f %.3f %d %d %.3f ", $ust, $diffUST, $msc, $diffMSC, $ustMod ) if $version < 6;
+	print OUT "@ary\n"; 
+
+	last if $linecount >= $startrow + $numrows;
+
+}
+
+	
+sub Usage {
+	print "Usage: stack4 startrow numrows startcol numcols infile outfile\n";
+	print "   or: stack4 startrow numrows pixelfile infile outfile\n";
+	print "   or: stack4 infile\n";
+	exit;
+}
+
+sub createColumnList {
+
+    $arg = shift @ARGV;
+    undef @ColumnList;
+
+    do {
+
+    	open( A, $arg ) || die "Can't open file $arg for column list: $!\n";
+	while(<A>) {
+		chomp;
+		next unless $_;
+		next if /^#/;
+		push( @ColumnList, $_ );
+	}
+	close A;
+	return @ColumnList;
+
+    } if -e $arg;
+
+    # not a file, assume numbers, get high number
+    $arg2 = shift @ARGV;
+    # high number is number to do, not top limit
+    $arg2+=$arg;
+
+    for( $i = $arg; $i < $arg2; $i++ ) {
+	push( @ColumnList, $i );
+    }
+    return @ColumnList;
+
+}
+
+sub createUnpackTemplate {
+
+	# create an unpack template for the data. Uses count of $data
+	# and ColumnList.
+
+	my $line = 'x' x $data;
+	$line = 'C' x $data if $startrow == -999;
+
+	while( $c = shift(@ColumnList) ) {
+		substr($line,$c-1,1) = 'C';
+	}
+	return $line;
+}
+

@@ -1,0 +1,28 @@
+#!/usr/bin/perl
+
+#  a program to expire old images, from specified directory based
+#  on the number of days in the command line
+#
+#   usage: argus.expire -7 directory
+
+use File::Find;
+
+$age = shift || die "Usage: $0 -age where\n";
+$where = shift || die "Usage: $0 -age where\n";
+
+$age = $age * 86400;  # days to seconds
+$limit = time + $age;
+
+print "Expiring files older than " . scalar localtime($limit) . " from $where\n";
+
+find( \&wanted, $where );
+
+sub wanted {
+
+	return unless /^(\d{9,})\./;
+	return if $1 > $limit;
+
+	print "$_\n";
+	unlink $_;
+
+}

@@ -1,0 +1,179 @@
+
+SOURCES = parseCommandLine.c \
+	loadCommandFile.c \
+	findCommand.c \
+	loadCameraModule.c \
+	appendList.c \
+	getBoolean.c \
+	getLong.c \
+	tagCommand.c \
+	dumpCommandFile.c \
+	getString.c \
+	commonCommand.c \
+	memory.c \
+	loadProcessModules.c \
+	processLoop.c \
+	saveResults.c \
+	modeToFormat.c \
+	whateverToRGB.c \
+	dc1394Decode.c \
+	message.c \
+	savex.c \
+	mapUIDToPortAndNode.c \
+	mapCameraToUID.c \
+	mapCameraNameToData.c \
+	framerateToDouble.c \
+	inserttext.c \
+	loadTimer.c \
+	alarm.c
+
+PACKAGE = hotm \
+	hotmomma \
+	postproc \
+	demon.so \
+	focus.so \
+	show.so \
+	snap.so \
+	sony.so \
+	micropix.so \
+	sony-min.so \
+	stack.so \
+	timer.so \
+	timex.so \
+	xcdsx900.so 
+	
+OBJECTS = ${SOURCES:.c=.o}
+
+#MODULEOBJECTS = ${MODULESOURCES:.c=.o}
+MODULEOBJECTS = 
+
+INCLUDES = hotm.h alarm.h camera.h
+
+SDLLIBPATH = -L/usr/local/lib -lSDL -lpthread
+
+LIBS = -ldl -lm -ldc1394_control -lraw1394 -ljpeg
+
+#MODULELIBS = -ldc1394_control -lraw1394 -ljpeg
+MODULELIBS = 
+
+CCgcc = gcc
+#CFLAGSgcc = -pedantic -I/usr/local/include -I/usr/local/include/SDL -L/usr/local/lib -ggdb -pg
+#for gmon profile LDFLAGS = -pg
+##CFLAGSgcc = -pedantic -O3 -I/usr/local/include -I/usr/local/include/SDL -L/usr/local/lib -ggdb
+CFLAGSgcc = -pedantic -g -I/usr/local/include -I/usr/local/include/SDL -L/usr/local/lib -ggdb
+CFLAGSgcccheck = -ggdb3 -O -pedantic-errors  -Wuninitialized -W -Wparentheses -Wsequence-point -I/usr/local/include -I/usr/local/include/SDL -L/usr/local/lib
+CCicc = icc
+CFLAGSicc = -g -O0 -I/usr/local/include -I/usr/local/include/SDL -L/usr/local/lib
+CFLAGSicc = -mcpu=pentium4 -march=pentium4 -ip -xW -I/usr/local/include -I/usr/local/include/SDL -L/usr/local/lib
+# -xW
+
+TARGETS = hotm \
+	demon.so \
+	show.so \
+	focus.so \
+	postproc \
+	simple.so \
+	micropix.so
+
+OBSTARGETS = \
+	timex.so \
+	focus.so \
+	snap.so \
+	stack.so \
+	hotmomma \
+	show.so \
+	timer.so \
+	sony.so \
+	sony-min.so 
+
+gcc :
+	CFLAGS="$(CFLAGSgcc)" CC="$(CCgcc)" make default
+check :
+	CFLAGS="$(CFLAGSgcccheck)" CC="$(CCgcc)" make default
+	
+intel :
+	CFLAGS="$(CFLAGSicc)" CC="$(CCicc)" make default
+
+default: $(TARGETS)  
+hotm: hotm.c $(INCLUDES) $(OBJECTS) 
+	$(CC) $(CFLAGS) $(LDFLAGS) -rdynamic -g -o hotm hotm.c $(OBJECTS) $(LIBS)
+	
+$(OBJECTS) : $(INCLUDES)
+
+default.camera.so : default.camera.c $(MODULEOBJECTS)
+	$(CC) $(CFLAGS) -c default.camera.c
+	$(LD) $(MODULELIBS) -shared -o default.camera.so default.camera.o $(MODULEOBJECTS)
+
+sony-min.so : sony-min.c camera.h alarm.h
+	$(CC) $(CFLAGS) -c sony-min.c
+	$(LD) $(MODULELIBS) -shared -o sony-min.so sony-min.o
+
+micropix.so : micropix.c hotm.h camera.h alarm.h
+	$(CC) $(CFLAGS) -c micropix.c
+	$(LD) $(MODULELIBS) -shared -o micropix.so micropix.o
+
+simple.so : simple.c hotm.h camera.h alarm.h
+	$(CC) $(CFLAGS) -c simple.c
+	$(LD) $(MODULELIBS) -shared -o simple.so simple.o
+
+sony.so : sony.c camera.h alarm.h
+	$(CC) $(CFLAGS) -c sony.c
+	$(LD) $(MODULELIBS) -shared -o sony.so sony.o
+
+xcdsx900.so : xcdsx900.c  alarm.h camera.h
+	$(CC) $(CFLAGS) -c xcdsx900.c
+	$(LD) $(MODULELIBS) -shared -o xcdsx900.so xcdsx900.o
+	
+snap.so : snap.c hotm.h $(MODULEOBJECTS)
+	$(CC) $(CFLAGS) -c snap.c
+	$(LD) $(MODULELIBS) -shared -o snap.so snap.o $(MODULEOBJECTS)
+	
+timer.so : timer.c hotm.h $(MODULEOBJECTS)
+	$(CC) $(CFLAGS) -c timer.c
+	$(LD) $(MODULELIBS) -shared -o timer.so timer.o $(MODULEOBJECTS)
+
+timex.so : timex.c hotm.h $(MODULEOBJECTS)
+	$(CC) $(CFLAGS) -c timex.c
+	$(LD) $(MODULELIBS) -shared -o timex.so timex.o $(MODULEOBJECTS)
+
+focus.so : focus.c hotm.h $(MODULEOBJECTS)
+	$(CC) $(CFLAGS) -c focus.c
+	$(LD) $(MODULELIBS) -shared -o focus.so focus.o $(MODULEOBJECTS)
+	
+# warn: dmStack currently does not work properly when optimized by the
+# intel compiler. bad data in first byte of output stack
+dmStack.o : dmStack.c demon.h rast.h
+	$(CC) -c -I/usr/local/include dmStack.c
+
+demon.so : demon.c dmStack.o demon.h hotm.h $(MODULEOBJECTS)
+	$(CC) $(CFLAGS) -c demon.c
+	$(LD) $(MODULELIBS) -shared -o demon.so demon.o dmStack.o -lm $(MODULEOBJECTS)
+
+disk.so : disk.c hotm.h $(MODULEOBJECTS)
+	$(CC) $(CFLAGS) -c disk.c
+	$(LD) $(MODULELIBS) -shared -o disk.so disk.o $(MODULEOBJECTS)
+
+stack.so : stack.c hotm.h rasterfile.h $(MODULEOBJECTS)
+	$(CC) $(CFLAGS) -c stack.c
+	$(LD) $(MODULELIBS) -shared -o stack.so stack.o $(MODULEOBJECTS)
+	
+timexpix.so : timexpix.c $(MODULEOBJECTS)
+	$(CC) $(CFLAGS) -c timexpix.c
+	$(LD) $(MODULELIBS) -shared -o timexpix.so timexpix.o $(MODULEOBJECTS)
+
+show.so : show.o $(MODULEOBJECTS)
+	$(CC) $(CFLAGS) -c show.c 
+	$(LD) $(MODULELIBS) -shared -o show.so show.o $(MODULEOBJECTS) $(SDLLIBPATH) 
+
+hotmomma : hotmomma.c message.c hotm.h
+	$(CC) $(CFLAGS) -o hotmomma hotmomma.c message.c
+
+postproc : postproc.c hotm.h demon.h inserttext.o savex.o whateverToRGB.o deBayerCode.h deBayer.o deBayerRGGB.o deBayerBGGR.o
+	$(CC) $(CFLAGS) $(LDFLAGS) -o postproc postproc.c inserttext.o whateverToRGB.o savex.o deBayer.o deBayerRGGB.o deBayerBGGR.o -ljpeg -lm
+
+clean :
+	rm -f *.o *.so hotm postproc hotmomma
+	rcsclean
+
+package :
+	tar cvf hotm.tar $(PACKAGE)

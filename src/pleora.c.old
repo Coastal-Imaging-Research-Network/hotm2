@@ -1,0 +1,371 @@
+
+/*
+	pleora.c -- the camera module for the pleora 
+	
+	loaded dynamically by hotm. contains the following functions:
+	
+	_init -- called by dlopen by default, must set up camera
+	_startCamera -- turn on collection using previously determined
+		parameters
+	_stopCamera  -- turn camera off
+	_getFrame    -- get the next frame please
+	
+*/
+
+/* 
+ *  Copied from xcdsx900.c
+ *
+ *  Revision 1.1  2002/11/06 21:24:48  stanley
+ *  Initial revision
+ *
+ *
+ */
+
+/*  
+ * John Stanley
+ * Coastal Imaging Lab
+ * College of Oceanic and Atmospheric Sciences
+ * Oregon State University
+ * Corvallis, OR 97331
+ *
+ * $Copyright 2002 Argus Users Group$
+ *
+ */
+
+static const char rcsid[] =
+     "$Id: pleora.c,v 1.9 2010/04/29 22:44:33 stanley Exp stanley $";
+
+#include "hotm.h"
+#include "alarm.h"
+
+#define CAMERAMODULE
+#include "camera.h"
+
+static char module[128];
+static char model[128];
+dc1394camera_t fakeCamera;
+
+/* shared memory area with pleora code */
+struct _plFrame_ {
+	int sem;
+	struct timeval now;
+	unsigned short data[640*480];
+} * plFrame;
+
+struct _cData_ {
+	int skip;
+} * cData;
+
+void mapCameraNameToData ();
+
+#include <sys/shm.h>
+
+#define DEFAULT(x,y)     if( 0 == x ) x = y
+
+
+/* camera already "started" by external program, mapped by _init */
+void
+_startCamera (struct _cameraModule_ *cam)
+{
+     int status;
+
+     if (cam->verbose & VERB_START) {
+          KIDID;
+          printf ("cam %d ", cam->cameraNumber);
+          printf ("start camera called, module \"%s\" \n", cam->module);
+     }
+
+     cam->frameCount = 0;
+     cam->sumDiff = 0.0;
+     cameraData.lastFrame.tv_sec = cameraData.lastFrame.tv_usec = 0;
+}
+
+/* a generic cleanup routine now. called by error handlers */
+/* I don't know what HAS been started, so I don't care if I */
+/* fail at stopping them. */
+void
+_stopCamera ()
+{
+     int status;
+
+     /* all done! might as well exit, we can do nothing more here */
+     exit (-1);
+
+}
+
+unsigned short myFrameBuff[640*480];
+
+struct _frame_ *
+_getFrame (struct _cameraModule_ *cam)
+{
+     int err;
+     double diff;
+     struct timeval now, filltime;
+     int status;
+     uint64_t	localRawTime;
+     long        localRawSecs;
+     long        localRawUSecs;
+
+
+     if (cam->verbose & VERB_GETFRAME) {
+	fprintf(stderr, "waiting for frame semaphore...\n");
+     }
+
+     while( plFrame->sem == 0 ) { usleep(10000); }
+
+     if (cam->verbose & VERB_GETFRAME) {
+	fprintf(stderr, "got frame semaphore...\n");
+     }
+     cameraData.testFrame.status = 0;
+
+     /*gettimeofday (&filltime, NULL);*/
+     filltime = plFrame->now;
+
+     diff = filltime.tv_sec - cameraData.lastFrame.tv_sec;
+     diff += (filltime.tv_usec - cameraData.lastFrame.tv_usec)
+          / 1000000.0;
+
+     if (cam->verbose & VERB_GETFRAME) {
+          KIDID;
+          printf ("cam %d ", cam->cameraNumber);
+          printf ("getframe %5d at %d.%06d",
+                  cam->frameCount, filltime.tv_sec, filltime.tv_usec);
+          printf (" diff %.4f", diff);
+          printf (" int: %.4f", cam->intTime);
+          printf (" gain: %.2f\n", cam->realGain);
+     }
+
+     cameraData.lastFrame = filltime;
+     cameraData.testFrame.dataPtr = (unsigned char *) plFrame->data;
+     cameraData.testFrame.when = filltime;
+     cameraData.testFrame.infoPtr = (void *) plFrame;
+
+     return &cameraData.testFrame;
+
+}
+
+void
+_releaseFrame ()
+{
+     int status;
+
+	plFrame->sem = 0;
+
+}
+
+
+/* set camera parameter. even though params are INTs, we pass in a */
+/* double so we can do ADJUST. double has more than enough precision */
+/* for holding int values when we SET */
+int
+_setCamera (char *caction, char *cfeature, double value)
+{
+
+	if( !strcmp( caction, "cam_set" ) ) {
+		if( !strcmp( cfeature, "feature_skip" ) ) {
+			cData->skip = value;
+		}
+		if( !strcmp( cfeature, "feature_frame_rate" ) ) {
+			/* estimate. fps = 30. */
+			value = 30.0 / value;
+			cData->skip = value;
+		}
+	}
+	
+
+}
+
+/* get camera parameter. */
+/* NOTE: it is YOUR responsibility to know that the pointer points */
+/* to a long enough result */
+int
+_getCamera (int feature, double *value)
+{
+
+}
+
+
+void
+_init ()
+{
+     struct _commandFileEntry_ *ptr;
+     long size;
+     int numCameras;
+     int i;
+     unsigned int ui;
+     long camsOnBus = 1;
+     int j;
+     int foundCamera = 0;
+     char line[128];
+     char *tmp;
+     int debug;
+     int verbose;
+     int status;
+     long myValue;
+     int portNode;
+     dc1394bool_t yesNo;
+     unsigned long B, R;
+     float fvalue;
+     unsigned int bpp;
+     float myFrameRate;
+     uint32_t value[3];
+
+     strcpy (model,"pleora/IR");
+     strcpy (module, "pleora");
+     strcpy (cameraModule.module, module);
+
+     /* init cameraData struct to all 0 */
+     memset (&cameraData, 0, sizeof (cameraData));
+
+     /* find out how verbose I am supposed to be */
+     getLongParam (&cameraModule.verbose, "cameraverbose", module);
+     verbose = cameraModule.verbose;
+
+     /* stop verbosity if output is not a terminal! It makes me crash! */
+     if (!isatty (1))
+          verbose = cameraModule.verbose = 0;
+
+     /* get my camera number */
+     getLongParam (&cameraModule.cameraNumber, "cameraNumber", module);
+     if (hotmParams.cameraNumber > -1)
+          cameraModule.cameraNumber = hotmParams.cameraNumber;
+     
+     /* find out how many other cameras there will be */
+     getLongParam( &camsOnBus, "camerasOnBus", module );
+     if (camsOnBus < 0 ) camsOnBus = 1;
+
+     /* figure out what type of camera we have */
+	cameraData.camera = &fakeCamera;
+	fakeCamera.model = &model[0];
+
+     printf("using model name: %s\n", cameraData.camera->model );
+
+     mapCameraNameToData ();
+     if (typeData.X == 0) {
+          printf ("%s: unknown camera model %s, aborting...\n",
+                  module, cameraData.camera->model);
+          for (i = 0; cameraData.camera->model[i]; i++)
+               printf ("%02x ", cameraData.camera->model[i]);
+          exit (-2);
+     }
+     /* keep track of camera name for later */
+     strcpy (cameraModule.module, typeData.name);
+
+     cameraModule.format =
+          modeToFormat (getString (findCommand ("cameraColorCoding")));
+     if (-1 == cameraModule.format)
+          cameraModule.format = modeToFormat (typeData.defaultColorCoding);
+
+     cameraModule.format = formatMONO16;
+
+     /* dc1394 v2 problem, need to save color coding. do it as mode */
+     get1394StringParam (&cameraData.mode, "cameraColorCoding", module);
+     DEFAULT (cameraData.mode, dc1394Decode (typeData.defaultColorCoding));
+
+     /* before you waste your time trying to figure out why this 
+        shouldn't work, notice that one "format" is cameraDATA and
+        other is cameraMODULE. CameraDATA.format contains the FORMAT
+        CODE for the camera, while the cameraMODULE.format contains
+        an internal code for the DATA format. Those are two hours
+        I'll never get back. Now go watch "My Spoon Is Too Big". */
+
+     if (verbose & VERB_FORMAT) {
+          KIDID;
+          printf ("cam %d data mode %d interal format %d camera format %d\n",
+                  cameraModule.cameraNumber,
+                  cameraData.mode, cameraModule.format, cameraData.format);
+     }
+
+     get1394StringParam (&cameraData.frameRate, "cameraFrameRate", module);
+     DEFAULT (cameraData.frameRate, dc1394Decode (typeData.defaultFramerate));
+     cameraModule.rate = cameraData.frameRate;
+
+     cameraModule.top = cameraModule.left = 0;
+     cameraModule.x = cameraModule.y = 0;
+
+     getLongParam (&cameraModule.top, "cameraTop", module);
+     getLongParam (&cameraModule.left, "cameraLeft", module);
+     getLongParam (&cameraModule.x, "camerax", module);
+     getLongParam (&cameraModule.y, "cameray", module);
+
+
+     DEFAULT (cameraModule.x, typeData.X);
+     DEFAULT (cameraModule.y, typeData.Y);
+     DEFAULT (cameraModule.left, typeData.left);
+     DEFAULT (cameraModule.top, typeData.top);
+     DEFAULT (cameraModule.cameraWidth, typeData.referenceWidth);
+     DEFAULT (cameraModule.cameraHeight, typeData.referenceHeight);
+
+     cameraModule.bufferLength = cameraModule.cameraWidth*cameraModule.cameraHeight * 2;
+
+     cameraModule.maxY = typeData.referenceHeight;
+     cameraModule.maxX = typeData.referenceWidth;
+
+     /* default camera speed to 400 */
+     cameraData.speed = DC1394_ISO_SPEED_400;
+     get1394StringParam (&cameraData.speed, "cameraspeed", module);
+
+     cameraModule.startCamera = _startCamera;
+     cameraModule.stopCamera = _stopCamera;
+     cameraModule.getFrame = _getFrame;
+     cameraModule.releaseFrame = _releaseFrame;
+     cameraModule.setCamera = _setCamera;
+     cameraModule.getCamera = _getCamera;
+     cameraModule.initCamera = _init;
+
+     /* now lets register our cleanup function */
+     atexit( _stopCamera );
+
+     /* report back some data on what I did when I setup */
+     if (verbose & VERB_CAMERA) {
+          KIDID;
+          printf ("cam %d dma buffersize: %d\n",
+                  cameraModule.cameraNumber, cameraModule.bufferLength);
+     }
+
+     /* find my shared memory area, please */
+     {
+	/* shm data FROM camera is keyed at 400. */
+	key_t frameSHMkey = 0x400 + cameraModule.cameraNumber;
+	int frameSHMshmid;
+	
+	frameSHMshmid = shmget( frameSHMkey, 
+				sizeof( struct _plFrame_ ),
+				0644 | IPC_CREAT );
+
+	if( -1 == frameSHMshmid ) {
+		printf("failed to shmget frame buffer\n");
+		exit;
+	}
+
+	plFrame = (struct _plFrame_ *) shmat( frameSHMshmid, 0, 0 );
+	if( -1 == plFrame ) {
+		printf("failed to shmat frame buffer\n");
+		exit;
+	}
+
+	/* and IPC control OF camera is at 500 */
+	key_t cdataKey = 0x500 + cameraModule.cameraNumber;
+	int cdatashmid;
+
+	cdatashmid = shmget( cdataKey, 
+				sizeof( struct _cData_ ),
+				0644 | IPC_CREAT );
+
+	if( -1 == cdatashmid ) {
+		printf("failed to shmget cdataKey buffer\n");
+		exit;
+	}
+
+	cData = (struct _cData_ *) shmat( cdatashmid, 0, 0 );
+	if( -1 == cData ) {
+		printf("failed to shmat cdataKey buffer\n");
+		exit;
+	}
+	cData->skip = 15;
+	plFrame->sem = 0; /* prime the pump for frames */
+    }
+
+    strcpy( cameraModule.rawOrder, "YYYY" );
+
+}

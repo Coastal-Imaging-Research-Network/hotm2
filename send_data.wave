@@ -1,0 +1,5 @@
+#!/bin/csh
+
+uucp -C *.jpg *.ras *.ras.Z skyking\!~/receive/stanley/tsue01/
+mv *.jpg *.ras *.ras.Z /home/users/stanley/collect/sent
+

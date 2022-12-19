@@ -1,0 +1,9 @@
+#! /bin/ksh
+
+ipcs | egrep '^0x' | awk '{print $2}' | while read id; do
+    ipcrm shm $id > /dev/null 2>&1
+    ipcrm msg $id > /dev/null 2>&1
+    ipcrm sem $id > /dev/null 2>&1
+done
+
+ipcs

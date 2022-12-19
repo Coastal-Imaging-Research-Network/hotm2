@@ -1,0 +1,5 @@
+timermodule: timer
+timertweak: 4
+timerverbose: 1
+timerperiod: 500
+timerport: /dev/ttyS1

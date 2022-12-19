@@ -1,0 +1,6 @@
+cameramodule: ./gige
+Cameraverbose: 63
+#cameratriggersource: 0
+#cameratrigger: 0
+#module: show
+#cameraoffset: 200000000

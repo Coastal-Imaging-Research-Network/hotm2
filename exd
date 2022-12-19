@@ -1,0 +1,182 @@
+#!/usr/bin/perl -w
+
+use exif;
+use strict;
+
+my $endofargs = 0;
+
+my $do_width = 0;
+my $do_height = 0;
+my $do_original_date = 0;
+my $long_format = 1;
+
+my $use_default = 1;
+
+sub usage() {
+  print <<DONE;
+Usage: exdump [ flags ] file [ files ... ]
+DONE
+      exit;
+}
+
+sub handle_arg($) {
+  my $arg = shift;
+  my $bare;
+
+  if ($endofargs) {
+    usage();
+  }
+
+  /-(.+)/ || do {
+    print "exdump: Badly formed argument \"$arg\".\n";
+    return;
+  };
+
+  $bare = $1;
+
+ switch: {
+    $bare eq "-" && do { 
+      $endofargs = 0; 
+      last switch;
+    };
+
+    $bare eq "-help" && do { 
+      usage(); 
+    };
+
+    ($bare eq "w" || $bare eq "-width") && do {
+      $do_width = 1; 
+      $use_default = 0;
+      last switch;
+    };
+
+    ($bare eq "h" || $bare eq "-height") && do {
+      $do_height = 1; 
+      $use_default = 0;
+      last switch;
+    };
+    
+    ($bare eq "d" || $bare eq "-dimensions") && do {
+      $do_width = 1; 
+      $do_height = 1; 
+      $use_default = 0;
+      last switch;
+    };
+    
+    ($bare eq "t" || $bare eq "-date-time-original") && do {
+      $do_original_date = 1; 
+      $use_default = 0;
+      last switch;
+    };
+
+    ($bare eq "l" || $bare eq "-long") && do {
+      $long_format = 1;
+      $use_default = 0;
+      last switch;
+    };
+
+    ($bare eq "p" || $bare eq "-parseable") && do {
+      $long_format = 0;
+      $use_default = 0;
+      last switch;
+    };
+
+    die "exdump: unknown flag $arg.\n";
+  }
+}
+
+sub handle_file($) {
+  my $name = shift;
+	my $i;
+
+  if (! -r $name) {
+    print "Cannot read $name\n";
+    return;
+  }
+
+  my %exiftags = exif::dump_jpeg($name);
+
+#  my $w = $exiftags{$exif::exifimagewidth}{value};
+#  my $h = $exiftags{$exif::exifimagelength}{value};
+#  my $d = $exiftags{$exif::datetimeoriginal}{value};
+
+   foreach $i (keys %exiftags) {
+
+	print "$exiftags{$i}{desc}: $exiftags{$i}{value}\n" 
+	   if $exiftags{$i}{count};
+    }
+
+	exit;
+
+  if ($long_format) {
+    print "$name\n";
+  } else {
+    print "$name:";
+  }
+
+  if ($do_width && $exiftags{$exif::exifimagewidth}{count}) {
+    my $w = $exiftags{$exif::exifimagewidth}{value};
+    if ($long_format) {
+      print "    Width: $w\n";
+    } else {
+      print " width=$w";
+    }
+  }
+
+  if ($do_height && $exiftags{$exif::exifimagelength}{count}) {
+    my $h = $exiftags{$exif::exifimagelength}{value};
+    if ($long_format) {
+      print "    Height: $h\n";
+    } else {
+      print " height=$h";
+    }
+  }
+  
+  if ($do_original_date && $exiftags{$exif::datetimeoriginal}{count}) {
+    my $d = $exiftags{$exif::datetimeoriginal}{value};
+    if ($long_format) {
+      print "    Original Date: $d\n";
+    } else {
+      print " original-date=\"$d\"";
+    }
+  }
+
+  if (! $long_format) {
+    print "\n";
+  }
+
+#  Print "$name: width=640 height=480 original-date=\"1999:07:22 10:39:44\"\n";
+}
+
+sub handle_last_arg() {
+  $endofargs = 1;
+
+  if ($use_default) {
+
+    $do_width = 1;
+    $do_height = 1;
+    $do_original_date = 1;
+    $long_format = 1;
+
+  }
+}
+
+my $handled_count = 0;
+
+if (@ARGV) {
+  for(@ARGV) {
+    if (!$endofargs && /^-/) {
+      handle_arg($_);
+    } else {
+      handle_last_arg();
+      handle_file($_);
+      $handled_count++;
+    }
+  }
+} else {
+  usage();
+}
+
+if ($handled_count == 0) {
+  usage();
+}

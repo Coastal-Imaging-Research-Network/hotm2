@@ -1,0 +1,85 @@
+Argus III and future raw data file format
+
+Format for data that does not fit into either the stack
+or "snap/timex/variance" format. E.g, multiple-Hertz
+full frame collections (or sub-Hertz full frame).
+
+ASCII header followed by binary data.
+
+Line 1: "AIII rawfile".
+
+AIII is the "magic number". Conveniently, Argus 4 (AIV),
+5 (AV), 6 (AVI), 7 (AVII) are all possible in just one four
+byte magic number. Fortunately, AVI files don't use 'AVI' as
+the magic number. 
+
+Lines 2-end: colon or semicolon separated name/value pairs.
+
+String values use semicolon separators. ("String", "Semi...").
+
+The following names are MANDATORY in ALL raw files. Period.
+
+	bufferLength: size of one image buffer raw
+
+The following names are NECESSARY for any raw file expected to
+be processed by Argus image functions:
+
+	width: final image width
+	height: final image height
+	count: number of frames asked for
+	begin: reference starting epoch time
+	format:	DC1394-coded format for image as number
+	cameraName; name returned by camera
+
+The following are optional:
+
+	sitename; argus short site name ('argus00', e.g.)
+	top:  pixel value of top line
+	left: pixel value of left edge
+	cameraNumber: camera number
+	version: version number of hotm/etc.
+	filename; name of file created by hotm
+	skip: skip count for sampling
+	
+The header is ended by the line: "einde". The word "einde" may not appear
+as a name/value name.
+
+Binary data:
+
+The binary section of the file will consist of raw data and info in
+the following format:
+
+	image_header1
+	frame1
+	image_header2
+	frame2
+	...
+
+where an image header has the following C definition:
+
+	struct _imageHeader_ {
+        	struct timeval when;
+        	double  shutter;
+        	double  gain;
+	} ;
+        
+
+which is 24 bytes. The timeval entry has two longs containing the seconds
+and microseconds of the time of the following frame. The shutter and gain
+values are doubles in real world units (time and dB) if known. 
+
+Each frame is bufferLength bytes long. No matter what.
+
+Determining sampling period
+
+The only means of accurately determining sampling period is to read two 
+consecutive image headers (and thus the intervening frame) and subtract. 
+
+Potential enhancement to deal with compression of raw image data
+
+Add one 32 bit number, top four bits indicating compression method, 28 bits
+giving number of bytes in compressed data. If we do this, reserve method
+0 to mean "no compression" and include this long in all files.
+
+                                                                       
+

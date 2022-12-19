@@ -1,0 +1,64 @@
+#! /usr/bin/perl
+
+use IPC::SysV qw(IPC_PRIVATE IPC_CREAT S_IRWXU S_IRWXG S_IRWXO);
+use IPC::Msg;
+
+$which = shift;
+$howmany = shift;
+($skip = shift) || ($skip = 0);
+($delay = shift) || ($delay = 0);
+($quiet = shift) || ($quiet = '');
+$quiet = '-q';
+$now = $when = time;
+$when = int($when/10)*10 + $delay;
+$where = "/data/stanley/$when.c$which.raw";
+$me = $$;
+$SIG{'ALRM'} = \&goaway;
+
+$what = "add $where $howmany $skip $when 0";
+
+$| = 1;
+print "$now: adding collection: $what\n";
+alarm 10;
+
+$msgOut = new IPC::Msg( $which, IPC_CREAT|S_IRWXU|S_IRWXG|S_IRWXO);
+die "sendmsg create: $!\n" if !defined $msgOut;
+$msgIn = new IPC::Msg( $me, IPC_CREAT|S_IRWXU|S_IRWXG|S_IRWXO);
+die "recvmsg create: $!\n" if !defined $msgIn;
+
+$msgOut->snd( 1, pack( "L a*", $me, $what ));
+
+# here we wait for immediate ok 
+$in = $msgIn->rcv( $buf, 256 );
+
+($code, $resp) = unpack( "L a*", $buf );
+print "$in: $code: $resp\n";
+do {
+	print "error response from hotm $code, type $in\n";
+	print "answer was: $resp\n";
+	$msgIn->remove;
+	exit;
+} if $in != 1;
+
+alarm 0;
+
+# now we wait for a type 2 response -- I'm done!
+$in = $msgIn->rcv( $buf, 256 );
+($code, $resp) = unpack( "L a*", $buf );
+do {
+	print "unknown response from hotm $code, type $in\n";
+        $msgIn->remove;
+        exit;
+} if $in != 2;
+
+system( "/bin/nice -n 19 /home/users/stanley/hotm/src/postproc $quiet $where" );
+unlink $where;
+
+$msgIn->remove;
+exit;
+ 
+sub goaway {
+	print "dies due to alarm\n";
+	$msgIn->remove;
+	exit;
+}

@@ -1,0 +1,10 @@
+# an example of a startup file for cam1 
+setcamera cam_set feature_frame_rate 3.0
+autoShutter 80 120 168
+intlimit .10
+setcamera cam_set my_feature_white_balance_r 612
+setcamera cam_set my_feature_white_balance_b 612
+setcamera cam_set feature_shutter 0.0125
+setcamera cam_set feature_gain 0
+#openshm
+

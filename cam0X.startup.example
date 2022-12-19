@@ -1,0 +1,8 @@
+# an example of a startup file that applies to ALL cameras
+# you probably don't want white balance here, it should be in
+# cam01.startup
+camera cam_set feature_frame_rate 3.0
+autoShutter 80 120 168
+intlimit .10
+setcamera cam_set feature_shutter 0.0125
+setcamera cam_set feature_gain 0

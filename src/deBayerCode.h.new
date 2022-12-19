@@ -1,0 +1,140 @@
+
+/* deBayerCode.h -- deBayer code */
+
+/* 
+ *   Here's the sweet trick that allows me to use the same code:
+ *   I SWAP the R and B output bytes in the pixel struct!
+ *   The deBayer algorithm doesn't care if the non-G bytes
+ *   are actually R or B, it only knows that one goes into the
+ *   R output and the other the B. Swap the two, use the same
+ *   code, because the two are swapped implicitely in the input.
+ *   Ain't that sweet?
+ *
+ */
+
+/* 
+ *  $Log: deBayerCode.h,v $
+ *  Revision 1.2  2013/11/15 02:25:20  root
+ *  first conversion to 16bit image data for all image input.
+ *
+ *  Revision 1.1  2004/12/17 21:28:15  stanley
+ *  Initial revision
+ *
+ *
+ */
+ 
+
+long w; /* width */
+long h; /* height */
+long x; /* x position */
+long y; /* y position */
+uint16_t tmp;
+
+/* insert a bit about 10 bit to 8 bit data here */
+
+uint16_t *up;       /* unsigned pointer */
+struct _pixel_ *pp; /* pixel pointer */
+
+/* get important bits out of cameraModule */
+w = c->x;
+h = c->y;
+
+up = in; 
+pp = out;
+
+/* start with blue. every other line (BGBGBG..), fill in the line */
+for( y=0; y<h-2; y+=2 ) {
+	for( x=0; x<w-1; x+=2 ) {
+		/* we are on a blue pixel, copy to output */
+		pp->b = *up;
+		/* step one to the right */
+		pp++; up++; 
+		/* we are between blues, average */
+		pp->b = (*(up-1)+*(up+1))/2;
+		/* step one to the right */
+		pp++; up++; 
+	}
+	/* skip a line */
+	pp += w; up += w;
+}
+/* now, go back and fill in the in-between lines. every line */
+/* will the the average of the above and below blue pixel */
+pp = out;
+for( y=1; y<h; y+=2 ) {
+	pp += w;
+	for( x=0; x<w; x++ ) {
+		tmp = (pp[-w].b + pp[w].b) / 2;
+		pp->b = tmp;
+		pp++;
+	}
+} 
+
+/* now repeat similar actions for red. fill in odd lines GRGRGR... */
+up = in; 
+pp = out;
+for( y=1; y<h; y+=2 ) {
+	/* move one line further, start one pixel in */
+	up += w; pp += w; /* up++; ?? */
+	for( x=1; x<w; x+=2 ) {
+		/* on a red, copy */
+		pp->r = *up;
+		/* step */
+		pp++; up++; 
+		/* average two neighbors */
+		pp->r = (*(up-1) + *(up+1) ) / 2;
+		/* step */
+		pp++; up++; 
+	}
+	/* pp--; up--;*/
+}
+/* now fill in the even lines */
+pp = out + w;
+for( y=2; y<h; y+=2 ) {
+	pp += w; 
+	for( x=0; x<w; x++ ) {
+		tmp = (pp[-w].r + pp[w].r) / 2;
+		pp->r = tmp;
+		pp++;
+	}
+}
+
+/* whew. Now green */
+/* start on second line, copy or average */
+up = in;  
+pp = out;
+
+for( y=1; y<h-1; y+=2 ) {
+	up += w; pp += w;
+	for( x=0; x<w-1; x+=2 ) {
+		/* on a green, copy */
+		pp->g = *up;
+		/* step */
+		pp++; up++; 
+		/* average */
+		pp->g = (*(up-1) + *(up+1) + *(up-w) + *(up+w)) / 4;
+		/* step */
+		pp++; up++; 
+	}
+}
+
+/* do it again, even lines starting at two */
+up = in+w; pp = out+w;
+
+for( y=2; y<h-1; y+=2 ) {
+	up += w; pp += w;
+	for( x=0; x<w-1; x+=2 ) {
+		/* not on green, average */
+		pp->g = (*(up-1) + *(up+1) + *(up-w) + *(up+w)) / 4;
+		/* step */
+		pp++; up++; 
+		/* on green, copy */
+		pp->g = *up;
+		/* step */
+		pp++; up++;
+	}
+}
+
+/* all done! */
+
+return 0.0;
+	

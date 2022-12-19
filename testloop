@@ -1,0 +1,25 @@
+#!/bin/csh
+
+while(1)
+
+	./hotm cam8
+	#../hotmomma/hotmomma
+	#cp *.c1.snap.jpg c1.jpg
+	#kill -QUIT 1571
+	#cp *.c2.snap.jpg c2.jpg
+	#kill -QUIT 1572
+	#cp *.c3.snap.jpg c3.jpg
+	#kill -QUIT 1573 
+	#cp *.c4.snap.jpg c4.jpg
+	#kill -QUIT 1576
+	#cp *.c5.snap.jpg c5.jpg
+	#kill -QUIT 1577
+	cp *.c8.snap.jpg c8.jpg
+	kill -QUIT 14283
+	#cp *.c9.snap.jpg c9.jpg
+	#kill -QUIT 1578
+
+	mv 101* temp
+
+end
+	

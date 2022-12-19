@@ -1,0 +1,26 @@
+#! /usr/bin/perl
+
+# doSched -- do something with a sched file
+
+$postproc = "/home/users/stanley/hotm/src/postproc";
+
+#3 add - 2048 0 30 6263 1063385256.c3.pix
+#1 add - 2048 0 30 4734 1063385256.c1.pix
+#2 add - 2048 0 30 965 1063385256.c2.pix
+
+# get time now, have consistent starts via delays
+$when = time + 60;
+
+while( <> ) {
+
+	chomp;
+	($which, undef, undef, $howmany, $skip, $delay, undef, $aoi)
+		= split(' ');
+
+	$delay = $when - time;
+	$comm = "/home/users/stanley/hotm/doCam $which $howmany $skip $delay $aoi";
+	print "$comm\n";
+	system( $comm );
+
+}
+

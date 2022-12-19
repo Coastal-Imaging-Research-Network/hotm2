@@ -1,0 +1,44 @@
+#!/usr/bin/perl
+
+# doCamAndSend -- take pictures and send to momma
+#
+#  manage temp directories and collection, and then send data
+#  when all is done.
+#
+#  I take all the parameters that doCam takes, I just pass them on,
+#  but I pull stuff out to make temp space.
+#
+
+use Cwd;
+
+$exeDir = getcwd;
+
+$cam = $ARGV[0];
+$now = time;
+
+$newDir = "tmp.$cam.$now.$$";
+
+# make a place for me to work
+mkdir( $newDir, 0777 ) || die "cannot create working director: $!\n";
+
+chdir $newDir;
+
+system( "$exeDir/postwam -c $cam -q -fc 3600 -at 30" );
+
+$out = "$now.c$cam.wam.mp4";
+$comm =  "/usr/bin/mencoder mf://\*.jpg -mf type=jpeg:fps=10 -fps 10 -ovc x264 -x264encopts pass=1:turbo:bitrate=900:bframes=1:me=umh:partitions=all:trellis=1:qp_step=4:qcomp=0.7:direct_pred=auto:keyint=300 -o $out" ;
+system($comm);
+$comm =  "/usr/bin/mencoder mf://\*.jpg -mf type=jpeg:fps=10 -fps 10 -ovc x264 -x264encopts pass=2:turbo:bitrate=900:bframes=1:me=umh:partitions=all:trellis=1:qp_step=4:qcomp=0.7:direct_pred=auto:keyint=300 -o $out" ;
+system($comm);
+system("rm -f *.jpg");
+system("rm -f divx.*");
+
+system( "$exeDir/send_data"  );
+
+@f = <*>;
+
+#die "files not moved during transfer! die die\n" unless scalar(@f) == 0;
+
+chdir '..';
+rmdir $newDir;
+

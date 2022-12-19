@@ -1,0 +1,2426 @@
+#LyX 1.3 created this file. For more info see http://www.lyx.org/
+\lyxformat 221
+\textclass article
+\language english
+\inputencoding auto
+\fontscheme default
+\graphics default
+\paperfontsize default
+\spacing single 
+\papersize Default
+\paperpackage a4
+\use_geometry 0
+\use_amsmath 0
+\use_natbib 0
+\use_numerical_citations 0
+\paperorientation portrait
+\secnumdepth 3
+\tocdepth 3
+\paragraph_separation indent
+\defskip medskip
+\quotes_language english
+\quotes_times 2
+\papercolumns 1
+\papersides 1
+\paperpagestyle headings
+
+\layout Title
+
+The HOTM Command Reference Manual
+\layout Author
+
+John Stanley
+\layout Date
+
+9 September, 2008
+\layout Section
+
+Introduction
+\layout Standard
+
+HOTM is the program developed and used by the Coastal Imaging Lab in all
+ versions of Argus III stations.
+ It is an updated and vastly improved version of the program 
+\begin_inset Quotes eld
+\end_inset 
+
+m
+\begin_inset Quotes erd
+\end_inset 
+
+, which was used on the SGI-based Argus II stations.
+ Since the new program works exclusively with IEEE1394 cameras (or 
+\begin_inset Quotes eld
+\end_inset 
+
+firewire
+\begin_inset Quotes erd
+\end_inset 
+
+), it seemed appropriate to name it HOTM.
+\begin_inset Foot
+collapsed false
+
+\layout Standard
+
+In early development of HOTM, a 
+\begin_inset Quotes eld
+\end_inset 
+
+parent
+\begin_inset Quotes erd
+\end_inset 
+
+ program, intended to control multiple invocations of HOTM, was developed.
+ It was called, appropriately, HOTMomma.
+\end_inset 
+
+
+\layout Standard
+
+HOTM was orginally intended to be a one-shot program.
+ It would be run once for every intended data collection set.
+ It was also developed to be modular, so that each collection type would
+ be a loadable library module.
+ E.g., there would be a 
+\begin_inset Quotes eld
+\end_inset 
+
+timex
+\begin_inset Quotes erd
+\end_inset 
+
+ library to perform time exposure collections, a 
+\begin_inset Quotes eld
+\end_inset 
+
+stack
+\begin_inset Quotes erd
+\end_inset 
+
+ library for stacks, etc.
+ Each library would have a function called 
+\begin_inset Quotes eld
+\end_inset 
+
+processFrame
+\begin_inset Quotes erd
+\end_inset 
+
+, which, when passed the input frame, would do whatever it was that was
+ required.
+\layout Standard
+
+The camera control software was also developed to be modular, so that each
+ model of camera would have it's own library of control functions.
+ Early designs called for functions 
+\begin_inset Quotes eld
+\end_inset 
+
+init
+\begin_inset Quotes erd
+\end_inset 
+
+, 
+\begin_inset Quotes eld
+\end_inset 
+
+getFrame
+\begin_inset Quotes erd
+\end_inset 
+
+, 
+\begin_inset Quotes eld
+\end_inset 
+
+releaseFrame
+\begin_inset Quotes erd
+\end_inset 
+
+, etc.
+ 
+\layout Standard
+
+This framework proved unworkable.
+ It was simply too long a task to start a camera from scratch each time
+ data was needed.
+ Unlike NTSC or PAL video cameras of the Argus II era which provided frames
+ of video at a never-ending 30 or 25 frames per second even when the computer
+ is off, firewire cameras require a controlling process to accept data,
+ and early versions of cameras could not perform autoiris or autoexposure
+ processing on their own while externally triggered.
+ Starting a camera to collect data thus required a significantly long period
+ of time initializing the camera and then achieving a proper exposure setting.
+ 
+\layout Standard
+
+However, it was soon realized that a simple
+\begin_inset Foot
+collapsed false
+
+\layout Standard
+
+Ha! Simple he says.
+\end_inset 
+
+library module could replace the specific processing libraries and turn
+ the HOTM program into a camera control demon.
+ In computer parlance, a demon is a program that runs in the background
+ doing some task or serving some function, starting once and running virtually
+ forever.
+ By running HOTM as a demon process, it could control the cameras continuously
+ and avoid the long startup delays.
+\layout Standard
+
+This demon module, in practice, simply loops forever accepting frames and
+ doing one of three things with them.
+ It either ignores the frame (releasing the memory immediately for reuse),
+ saves the frame in raw format to a designated file, or extracts pixels
+ and generates a stack file in rasterfile format.
+ The demon is controlled by a set of commands delivered through system messages.
+ Each demon maintains an input queue to receive messages, and a ten entry
+ list of actions that it has been instructed to perform.
+ Some command messages are immediate, in that they are processed and completed
+ immediately.
+ Some require a one-frame delay prior to completion.
+ The others control data collection and are time-based.
+\layout Standard
+
+Other than the demon commands which are delivered by system messages, HOTM
+ is controlled by either command line switches or parameter:value pairs
+ read from text files specified on the command line.
+\layout Section
+
+HOTM Command Processing
+\layout Standard
+
+Other than the demon commands which are delivered by system messages, HOTM
+ is controlled by either command line switches or parameter:value pairs
+ read from text files specified on the command line.
+ These options and values are read at startup and processed by either the
+ HOTM main code or one of the loaded modules.
+ 
+\layout Standard
+
+The parameter:value pairs are exactly that: a string identifying the parameter,
+ a colon, and a string giving the value.
+ For example.
+ 
+\begin_inset Quotes eld
+\end_inset 
+
+sitename: argus08
+\begin_inset Quotes erd
+\end_inset 
+
+.
+ By convention, camera control parameters start with the string 
+\begin_inset Quotes eld
+\end_inset 
+
+camera
+\begin_inset Quotes erd
+\end_inset 
+
+, and other module's parameters start with the appropriate string.
+ Because of the large number of symbolic names assigned to IIDC
+\begin_inset Foot
+collapsed false
+
+\layout Standard
+
+Instrumentation and Industrial control working group for Digital Cameras
+ standard for IEEE1394 digital cameras.
+ This standard defines the commands and functions supplied by firewire cameras
+ that are IIDC conforming.
+ The current standard as of this writing is 1.31.
+ 
+\end_inset 
+
+ compliant camera parameters, parameters setting camera functions may have
+ string values using those symbolic names instead of the extremely obvious
+ numeric codes they map to.
+\layout Standard
+
+Parameter names are case-insensitive.
+ 
+\layout Subsection
+
+HOTM Command Line Switches
+\layout Standard
+
+The following command line switches are available.
+ Note that many of these can also be set by parameter:value entries in input
+ command files.
+ In most cases, any settings here will be made in the parameter:value files.
+\layout Subsubsection
+
+-d 
+\layout Standard
+
+Turn on the hotm debugging flag.
+ This flag is a boolean contained in the global struct hotmParams.debug.
+ The parameter name for this flag is 
+\begin_inset Quotes eld
+\end_inset 
+
+debug
+\begin_inset Quotes erd
+\end_inset 
+
+.
+ I.e, setting this flag in a text command file would require a line like
+ 
+\begin_inset Quotes eld
+\end_inset 
+
+debug: 1
+\begin_inset Quotes erd
+\end_inset 
+
+.
+ 
+\layout Subsubsection
+
+-v n 
+\layout Standard
+
+Sets the verbose level of hotm to 'n'.
+ N is the number generated by or'ing the following flags as defined in hotm.h:
+\layout LyX-Code
+
+#define HVERB_COMMANDLINE      0x0001 
+\layout LyX-Code
+
+#define HVERB_CAMERA           0x0002 
+\layout LyX-Code
+
+#define HVERB_MOMMA            0x0004 
+\layout LyX-Code
+
+#define HVERB_UIDMAP           0x0008 
+\layout LyX-Code
+
+#define HVERB_ALLCOMMANDS      0x0010 
+\layout LyX-Code
+
+#define HVERB_COMMANDFILE      0x0020 
+\layout LyX-Code
+
+#define HVERB_PROCESSIN        0x0040 
+\layout LyX-Code
+
+#define HVERB_PROCESSTIMES     0x0080 
+\layout LyX-Code
+
+#define HVERB_PROCESSOUT       0x0100 
+\layout LyX-Code
+
+#define HVERB_MEMORY           0x0200 
+\layout LyX-Code
+
+#define HVERB_FINDCOMMAND  0x10000000 
+\layout LyX-Code
+
+#define HVERB_LISTCOMMANDS 0x20000000 
+\layout Standard
+
+So, to request diagnostic messages about processing times and camera information
+, N would be 130 (0x80 or 0x02, in decimal.) The parameter name for this
+ flag is 
+\begin_inset Quotes eld
+\end_inset 
+
+verbose
+\begin_inset Quotes erd
+\end_inset 
+
+.
+ 
+\layout Subsubsection
+
+-version xxxxx
+\layout Standard
+
+Sets the program version identifier to the string 'xxxxx'.
+ This string appears in text in the top line of the snap, timex, and variance
+ images.
+ The parameter name for this flag is 
+\begin_inset Quotes eld
+\end_inset 
+
+programVersion
+\begin_inset Quotes erd
+\end_inset 
+
+.
+ 
+\layout Subsubsection
+
+-s xxxxx
+\layout Standard
+
+Sets the site name to 'xxxxx'.
+ This string also appears in the text in the top line of the images, and
+ in the stack file.
+ The parameter name for this flag is 
+\begin_inset Quotes eld
+\end_inset 
+
+sitename
+\begin_inset Quotes erd
+\end_inset 
+
+.
+ 
+\layout Subsubsection
+
+-e epochtime
+\layout Standard
+
+Sets the 'base' epoch time for data collections.
+ Obsolete in the demon version of the program.
+\layout Subsubsection
+
+-p pid
+\layout Standard
+
+The process id of the controlling 
+\begin_inset Quotes eld
+\end_inset 
+
+HOTMomma
+\begin_inset Quotes erd
+\end_inset 
+
+ process.
+ This is also obsolete in the demon version of the program.
+ Good code is valuable in itself; a good programmer doesn't delete good
+ code just because it isn't needed anymore.
+\layout Subsubsection
+
+-c n 
+\layout Standard
+
+Sets the camera number for this process.
+ The parameter name for this flag is 
+\begin_inset Quotes eld
+\end_inset 
+
+cameraNumber
+\begin_inset Quotes erd
+\end_inset 
+
+.
+ This flag is almost always set on the command line by the script that starts
+ the HOTM processes, since that allows the same parameter:value files to
+ be used for all of the cameras.
+ 
+\layout Subsubsection
+
+Anything Else
+\layout Standard
+
+Everything else on the command line (not starting with a hyphen) is considered
+ to be the name of a startup command file, and the contents of each file
+ in sequence are read and processed looking for parameter:value pairs.
+ It is irrelevant which file contains which parameter:value pairs, the contents
+ are stored in one linked list and used later, after all files have been
+ read.
+ Setting the same parameter in more than one file is undefined behaviour
+\begin_inset Foot
+collapsed false
+
+\layout Standard
+
+Well, of course the result is determinant since the code does the same thing
+ every time, it's just that I forget what it does (use first or last defined)
+ and don't want people relying on any specific behaviour.
+\end_inset 
+
+.
+ 
+\layout Subsection
+
+Parameter:Value Pairs
+\layout Standard
+
+There are a large number of possible parameters.
+ Some deal exclusively with the camera, and standard practice is that they
+ will begin with the string 
+\begin_inset Quotes eld
+\end_inset 
+
+camera
+\begin_inset Quotes erd
+\end_inset 
+
+.
+ A module named 'show' would have parameter names starting with 'show'.
+ 
+\layout Standard
+
+Some parameters are HOTM controls.
+ Several of these have been listed under the command line flag section.
+\layout Subsubsection
+
+Loading Modules
+\layout Standard
+
+There are two parameter names which control which modules are loaded into
+ the HOTM program.
+ 
+\layout Subsubsection*
+
+cameraModule: xxxxxxx
+\layout Standard
+
+This parameter:value pair causes the shareable library named 'xxxxxxx.so'
+ to be loaded.
+ This library is expected to contain functions dealing specifically with
+ camera operations, and a function to initialize a specific type of camera.
+ The function of those functions will be described later.
+ 
+\layout Standard
+
+Through experience, it has been determined that IIDC cameras can almost
+ all be controlled using one module currently named 'micropix'.
+ The MicroPix camera was one of the first very conforming cameras used,
+ and the module was easily extended to conver newer IIDC cameras.
+\layout Subsubsection*
+
+module: xxxxxx
+\layout Standard
+
+This parameter:value pair loads the shareable library named 'xxxxxx.so',
+ which is expected to contain a limited set of functions that deal with
+ camera images produced by the camera module.
+ The functions will be described later.
+ 
+\layout Subsubsection
+
+Camera Module Parameter:Value Pairs
+\layout Standard
+
+Many of the camera module parameters are defined by the libdc1394 parameters
+ available for controlling an IIDC camera.
+ In fact, the camera itself is queried to obtain a list of available parameters,
+ by name.
+ First, the string 
+\begin_inset Quotes eld
+\end_inset 
+
+FEATURE
+\begin_inset Quotes erd
+\end_inset 
+
+ is removed from each camera feature, then 
+\begin_inset Quotes eld
+\end_inset 
+
+camera
+\begin_inset Quotes erd
+\end_inset 
+
+ prepended to form the HOTM parameter name.
+ E.g., the camera parameter named 
+\begin_inset Quotes eld
+\end_inset 
+
+FEATURE_SHUTTER
+\begin_inset Quotes erd
+\end_inset 
+
+ becomes 
+\begin_inset Quotes eld
+\end_inset 
+
+cameraShutter
+\begin_inset Quotes erd
+\end_inset 
+
+.
+ 
+\layout Standard
+
+Many of the camera parameter values have symbolic names assigned by the
+ libdc1394 library.
+ These are found in the dc1394_control.h header file.
+ It is certainly more convenient to refer to external trigger mode 0 as
+ 
+\begin_inset Quotes eld
+\end_inset 
+
+TRIGGER_MODE_0
+\begin_inset Quotes erd
+\end_inset 
+
+ instead of the number 352, which is the value the libdc1394 library sends
+ to the camera.
+ Similarly, FRAMERATE_3_75 means more to me than the value 33.
+ The function that retrieves parameters which have libdc1394 names uses
+ the file 'dc1394ParamList' to map from names to numbers.
+ 
+\layout Standard
+
+The following are IIDC/libdc1394 camera feature names:
+\layout LyX-Code
+
+FEATURE_BRIGHTNESS, FEATURE_EXPOSURE,
+\layout LyX-Code
+
+FEATURE_SHARPNESS, FEATURE_WHITE_BALANCE, FEATURE_HUE,
+\layout LyX-Code
+
+FEATURE_SATURATION, FEATURE_GAMMA, FEATURE_SHUTTER,
+\layout LyX-Code
+
+FEATURE_GAIN, FEATURE_IRIS, FEATURE_FOCUS,
+\layout LyX-Code
+
+FEATURE_TEMPERATURE, FEATURE_TRIGGER,
+\layout LyX-Code
+
+FEATURE_TRIGGER_DELAY, FEATURE_WHITE_SHADING,
+\layout LyX-Code
+
+FEATURE_FRAME_RATE, FEATURE_ZOOM, FEATURE_PAN,
+\layout LyX-Code
+
+FEATURE_TILT, FEATURE_OPTICAL_FILTER,
+\layout LyX-Code
+
+FEATURE_CAPTURE_SIZE, FEATURE_CAPTURE_QUALITY 
+\layout Standard
+
+Not all features are implemented in all cameras, and unfortunately, not
+ all features are simple values.
+ The following are IIDC/libdc1394-based HOTM parameters that are not 
+\begin_inset Quotes eld
+\end_inset 
+
+features
+\begin_inset Quotes erd
+\end_inset 
+
+ of the camera:
+\layout LyX-Code
+
+cameraMode
+\layout LyX-Code
+
+cameraFormat
+\layout LyX-Code
+
+cameraFrameRate
+\begin_inset Foot
+collapsed false
+
+\layout Standard
+
+Whoa! That looks like FEATURE_FRAME_RATE to me! No.
+ Because this parameter is set in the libdc1394 setup function and not sent
+ to the camera later (when the other parameters are set) I differentiated
+ between the 'feature' frame rate and actual frame rate by leaving out the
+ underscore in the latter.
+ Mode, format, and speed are all set in the same setup call, but there is
+ no underscore in 
+\begin_inset Quotes eld
+\end_inset 
+
+SPEED
+\begin_inset Quotes erd
+\end_inset 
+
+ so it looks just like the 'feature' parameter.
+ 
+\end_inset 
+
+
+\layout Standard
+
+I would refer you to the IIDC 1.31 standard document for a fuller description
+ of each 'feature'.
+ Note that I said 
+\begin_inset Quotes eld
+\end_inset 
+
+fuller
+\begin_inset Quotes erd
+\end_inset 
+
+, not 
+\begin_inset Quotes eld
+\end_inset 
+
+understandable
+\begin_inset Quotes erd
+\end_inset 
+
+.
+ 
+\layout Subsubsection*
+
+White Balance Values
+\layout Standard
+
+The camera white balance setting consistes of two numbers.
+ One controls the red gain, the other blue.
+ It can be encoded as one number in the parameter:value file, but it is
+ more convenient to split the values into individual settings.
+ HOTM has added the two camera parameter names MY_FEATURE_WHITE_BALANCE_R
+ and MY_FEATURE_WHITE_BALANCE_B, which map into HOTM parameter names cameraWhite
+BalanceR and cameraWhiteBalanceB respectively, to allow this.
+ 
+\layout Subsubsection*
+
+Non-IIDC Parameter Names and Values
+\layout Standard
+
+The following parameter:value pairs are available in the micropix camera
+ module.
+\layout LyX-Code
+
+cameraVerbose
+\layout LyX-Code
+
+cameraNumber
+\layout LyX-Code
+
+cameraTop
+\layout LyX-Code
+
+cameraLeft
+\layout LyX-Code
+
+cameraX
+\layout LyX-Code
+
+cameraY
+\layout Standard
+
+The latter four define the image top left corner and width and height when
+ using FORMAT_7.
+ 
+\layout Subsubsection*
+
+Example Parameter:Value File
+\layout Standard
+
+This is an example of a control file for a camera module.
+ 
+\layout LyX-Code
+
+cameramodule: micropix 
+\layout LyX-Code
+
+cameraNumber: 1 
+\layout LyX-Code
+
+Cameraverbose: 31 
+\layout LyX-Code
+
+#cameraMode: MODE_640x480_RGB 
+\layout LyX-Code
+
+#cameraFormat: FORMAT_VGA_NONCOMPRESSED
+\layout LyX-Code
+
+#cameraFrameRate: FRAMERATE_3_75 
+\layout Standard
+
+Note that the last three lines have been commented out.
+ How does the camera know what to do without them? 
+\layout Subsubsection*
+
+Default Camera Operating Parameters
+\layout Standard
+
+The default operating parameters for various models of cameras are stored
+ in the file 
+\begin_inset Quotes eld
+\end_inset 
+
+cameraData
+\begin_inset Quotes erd
+\end_inset 
+
+, which is read once the camera module knows the model of camera it is controlli
+ng
+\begin_inset Foot
+collapsed false
+
+\layout Standard
+
+How can it possibly know that? By asking the camera itself, of course.
+ How cool is that?
+\end_inset 
+
+.
+ Each line in that file is a colon delimited list of:
+\layout LyX-Code
+
+name
+\layout LyX-Code
+
+default format
+\layout LyX-Code
+
+default mode
+\layout LyX-Code
+
+default frame rate
+\layout LyX-Code
+
+image width
+\layout LyX-Code
+
+image height
+\layout LyX-Code
+
+four format 7 parameters
+\layout Standard
+
+For example:
+\layout LyX-Code
+
+Scorpion SCOR-14SOC:
+\layout LyX-Code
+
+FORMAT_SVGA_NONCOMPRESSED_2:
+\layout LyX-Code
+
+MODE_1280x960_MONO:
+\layout LyX-Code
+
+FRAMERATE_7_5:1280:960:1280:960:1:1 
+\layout Standard
+
+(That's all on one line.) This line instructs HOTM to set the camera into
+ the listed format and mode and frame rate, unless otherwise specified in
+ the parameter:value file.
+ This makes it easier to reduce the default frame rate for all cameras on
+ a system (editing one file instead of one file for each camera).
+ Different models can have different values, of course.
+\layout Standard
+
+The remaining camera 'features' default to power on values, unless otherwise
+ set.
+ For example, GAMMA is off at power on.
+ 
+\layout Subsubsection
+
+Camera Module Verbose Flag Values
+\layout Standard
+
+The following are the bit-encoded verbose flag values used in the camera
+ module.
+ 
+\layout LyX-Code
+
+#define VERB_START    1 
+\layout LyX-Code
+
+#define VERB_STOP     2 
+\layout LyX-Code
+
+#define VERB_GETFRAME 4 
+\layout LyX-Code
+
+#define VERB_FORMAT   8 
+\layout LyX-Code
+
+#define VERB_FEATURE 32 
+\layout LyX-Code
+
+#define VERB_CAMERA  16 
+\layout LyX-Code
+
+#define VERB_MAPPING 64 
+\layout LyX-Code
+
+#define VERB_AUTO   128 
+\layout Subsubsection
+
+The Camera Module Functions
+\layout Standard
+
+The camera module is expected to contain the following functions.
+\layout Subsubsection*
+
+_init
+\layout Standard
+
+This function performs all actions necessary to access and initialize the
+ camera.
+ It must convert the requested camera number into the IEEE1394 UID
+\begin_inset Foot
+collapsed false
+
+\layout Standard
+
+Each device on the firewire bus has a Unique ID (UID) programmed into it.
+ (Some hubs violate this requirement and have UID of 0.) Devices are accessed
+ via this UID.
+ HOTM uses the file 'cameraMapping' to map camera numbers into the UID value.
+ This mapping file contains lines with the format 
+\begin_inset Quotes eld
+\end_inset 
+
+n: 0xaaaaaaaaaaa
+\begin_inset Quotes erd
+\end_inset 
+
+, where 'n' is the camera number and 'a...' is the camera UID.
+ For this reason, it is irrelevant where on the firewire bus a camera is
+ installed, as long as it is communicating it will be found.
+ The UID for a camera can be determined in a number of ways.
+ Perhaps the easiest is to simply plug the camera in and examine the logs
+ ('dmesg' command) to see what UID just showed up.
+ The UID is NOT the serial number written on the outside of Pt.
+ Grey cameras.
+\end_inset 
+
+, call the libdc1394 functions to allocate memory buffers for images, and
+ set appropriate camera parameters (trigger mode, gain, shutter, etc.) Some
+ of these parameters may be modified by other camera module functions (gain
+ and shutter under autoiris mode for example), but some are static for the
+ life of the demon (frame rate, e.g.) Because of the limitations of the shareable
+ library system, this function MUST be named _init.
+ The remaining functions may have any name; a pointer to each is stored
+ by the _init function.
+\layout Subsubsection*
+
+startCamera
+\layout Standard
+
+Because there can be significant delay between the _init function and the
+ actual ability of HOTM to process incoming frames, and because this delay
+ can cause buffer overflows, the camera is not actually instructed to start
+ sending frames until this function is called.
+\layout Subsubsection*
+
+stopCamera
+\layout Standard
+
+This function instructs the camera to stop sending frames.
+ It is called prior to HOTM exit.
+\layout Subsubsection*
+
+getFrame
+\layout Standard
+
+Retrieve and return the next available frame.
+ 
+\layout Subsubsection*
+
+releaseFrame
+\layout Standard
+
+Deallocate the buffer containing the current image so that the libdc1394
+ library may reuse it for another incoming frame.
+ If you do not release the frame when finished with it, the buffers will
+ fill and the program will crash
+\begin_inset Foot
+collapsed false
+
+\layout Standard
+
+A bad thing.
+\end_inset 
+
+.
+ 
+\layout Subsubsection*
+
+setCamera, getCamera
+\layout Standard
+
+These two functions are related.
+ One can be used to set specific camera parameters, the other to get them.
+ They allow modules outside the camera module to access camera functions.
+ Their most common use is in the autoshutter code (in demon.so) that changes
+ gain or shutter time values.
+ 
+\layout Subsubsection
+
+Data Processing Modules
+\layout Standard
+
+Data processing modules are expected to contain the following five functions
+ which will be called by the main loop in HOTM.
+ Even though two are obsoleted by the demon module, all are still necessary.
+ As with the camera module, the initialization function MUST be named _init,
+ and the other four will be accessed by pointers stored by _init.
+\layout Subsubsection*
+
+_init
+\layout Standard
+
+Allocate any required memory, and store the pointers to the other four functions
+ in a globally accessible struct.
+\layout Subsubsection*
+
+processFrame
+\layout Standard
+
+Do whatever it is that is required to the frame passed into this function.
+ This function is called once per frame.
+\layout Subsubsection*
+
+processPixel
+\layout Standard
+
+This function was intended to be called once per pixel in a frame.
+ Because it is so SLOOOOWWW to process a frame this way, it is obsolete.
+ If you need your user-supplied module to process pixels this way, include
+ this function.
+ Otherwise, have _init set the pointer to NULL.
+\layout Subsubsection*
+
+closeFrame
+\layout Standard
+
+Perform any functions necessary at the end of pixel by pixel frame processing.
+ NULL if not required.
+\layout Subsubsection*
+
+saveResults
+\layout Standard
+
+A function that is called when collection is completed and the results need
+ to be stored.
+ Obsolete under demon mode.
+\layout Section
+
+The DEMON Module
+\layout Standard
+
+The demon module is the workhorse of the current HOTM system.
+ It controls all data collection, as well as managing things like camera
+ gains and integration times.
+ 
+\layout Standard
+
+The original version of HOTM was intended to include all the data processing
+ functions as loaded modules.
+ When HOTM finished, you would have the results packaged for immediate consumpti
+on.
+ When demon mode was designed, it became impossible to predict all the kinds
+ of processing that would be required, and beneficial to allow users to
+ define their own processing if they desired without requiring them to understan
+d the intricacies of HOTM.
+ With that in mind, the demon module was designed to write just one kind
+ of output file: a raw format containing the HOTM parameters and frame data.
+ A followup processing program (currently called 'postproc') was written
+ to process this file and produce the 'standard Argus products' of snap,
+ timex, variance, and more recently bright images.
+ Users can (and are encouraged to) write their own postprocessing program
+ to create their own special products.
+ 
+\layout Standard
+
+However, it was determined that saving a raw format file that would be later
+ processed into a stack was horribly wasteful and would create absolutely
+ huge files that would just be deleted
+\begin_inset Foot
+collapsed false
+
+\layout Standard
+
+Determined by actually creating absolutely huge raw files that were just
+ deleted after a few pixels were extracted from each frame.
+ A simply calculation: a normal stack is 1024 frames.
+ A Scorpion camera frame is 1.2Mbytes.
+ A raw file for such a stack is more than a gigabyte in size.
+ Much more efficient to do the stack directly.
+ 
+\end_inset 
+
+.
+ For that reason, stack creation was moved into the demon module itself.
+\layout Standard
+
+The current version of the demon module results in one of two outputs: the
+ requested raw data file or the stack file in rasterfile format.
+ 
+\layout Subsection
+
+Demon Module Parameter:Value Pairs
+\layout Subsubsection
+
+diskVerbose
+\layout Standard
+
+Sets the verbose flag for the demon module.
+ See the section on the command line verbose flag for what the values are.
+\layout Subsection
+
+Dealing With The Devil
+\layout Standard
+
+Ok, a bit alliterative, but close to the truth.
+ Once the demon module is loaded and HOTM has finished processing all the
+ parameter files, there is no way to change the command line or the file
+ contents.
+ All communication must take place some other way.
+ 
+\layout Standard
+
+The demon module creates a Unix message queue which it listens to to receive
+ command input.
+ Commands are sent in simple text, but require a bit of overhead
+\begin_inset Foot
+collapsed false
+
+\layout Standard
+
+Nothing in Unix is ever truly simple.
+\end_inset 
+
+ to indicate length and other parameters.
+ The Perl script 
+\begin_inset Quotes eld
+\end_inset 
+
+send.pl
+\begin_inset Quotes erd
+\end_inset 
+
+ (or sometimes just 
+\begin_inset Quotes eld
+\end_inset 
+
+send
+\begin_inset Quotes erd
+\end_inset 
+
+) takes care of this overhead.
+ The 
+\begin_inset Quotes eld
+\end_inset 
+
+send
+\begin_inset Quotes erd
+\end_inset 
+
+ command has the following format:
+\layout LyX-Code
+
+send cameraNumber command ...
+\layout Standard
+
+where cameraNumber is the physical camera number
+\begin_inset Foot
+collapsed false
+
+\layout Standard
+
+I tried hard to figure out a better way of saying this, but can't.
+ A camera has a 'physical' number, which becomes the message queue identifier,
+ and a 'virtual' number, which appears in the data file names.
+ Because there can be no message queue 0 there can be no physical camera
+ 0, but the camera can be virtual 0.
+ Some management scripts assume all camera numbers are less than 10, thus
+ limiting the range of physical cameras to 1 through 9.
+ More on this later, under 'masquerade'.
+ 
+\end_inset 
+
+ and 'comand' is the command string.
+ The command can contain spaces.
+ 
+\begin_inset Quotes eld
+\end_inset 
+
+send
+\begin_inset Quotes erd
+\end_inset 
+
+ just packs up the entire rest of the command line and sends it to HOTM.
+ The demon is programmed to return a response to each command, which 
+\begin_inset Quotes eld
+\end_inset 
+
+send
+\begin_inset Quotes erd
+\end_inset 
+
+ dutifully waits for and reports to the user.
+\layout Subsection
+
+Demon Commands
+\layout Standard
+
+All this time, and here's the section you wanted all along.
+ These are the commands the current version of demon understands.
+ Starting with the most important.
+\layout Subsubsection
+
+Add
+\layout Standard
+
+Add instructs the demon to collect some bit of image data.
+ It 
+\begin_inset Quotes eld
+\end_inset 
+
+adds
+\begin_inset Quotes erd
+\end_inset 
+
+ the requested collection to an internal list of collections.
+ This list is currently statically allocated to contain ten actions.
+ 
+\begin_inset Quotes eld
+\end_inset 
+
+Add
+\begin_inset Quotes erd
+\end_inset 
+
+ takes the following parameters:
+\layout LyX-Code
+
+output file name
+\layout LyX-Code
+
+number of frames
+\layout LyX-Code
+
+number of frames to skip
+\layout LyX-Code
+
+start time (epoch time)
+\layout LyX-Code
+
+pixel count
+\layout LyX-Code
+
+pixel list filename (if stack)
+\layout LyX-Code
+
+pixel deBayer flag (if stack)
+\layout Standard
+
+Note that the last two parameters are used only for stacks.
+ An example of an add command, including the 
+\begin_inset Quotes eld
+\end_inset 
+
+send
+\begin_inset Quotes erd
+\end_inset 
+
+ script call, is:
+\layout LyX-Code
+
+./send 1 add /tmp/foo.raw 200 1 120000000 0
+\layout Standard
+
+which tells the demon to collect 200 frames, skipping every other 1, starting
+ at epochtime 120000000.
+ An example of a stack collection is much more complicated and involves
+ counting the pixels and sending them to the demon.
+ For general user interface, the perl script 
+\begin_inset Quotes eld
+\end_inset 
+
+doCam
+\begin_inset Quotes erd
+\end_inset 
+
+ manages all of this and more.
+ For example, 
+\layout LyX-Code
+
+./doCam 1 200 1 0 myPixList.pix
+\layout Standard
+
+would result in camera 1 being requested to take 200 frames, skipping every
+ other one, starting NOW (0 delay), creating a stack file using pixels in
+ the file myPixList.pix.
+\layout Standard
+
+Also note that the pixel count parameter is used to signal a stack collection.
+ If the value is 0, there is no stack.
+ If the value is positive, it is the number of pixel pairs the demon will
+ expect to be sent through the message passing system.
+ If the pixel count is negative, then the absoltue value represents the
+ number of pixels the demon will load directly from the file.
+ This is MUCH faster than sending the pixel data through the IPC channel,
+ but requires local access to the file.
+ 
+\layout Standard
+
+Fortunately, doCam takes care of this.
+\layout Subsubsection
+
+Exit
+\layout Standard
+
+Self explanatory? Stopping a running demon: 
+\begin_inset Quotes eld
+\end_inset 
+
+./send 1 exit
+\begin_inset Quotes erd
+\end_inset 
+
+ stops camera 1.
+\layout Subsubsection
+
+Ping
+\layout Standard
+
+A simple test to see if the demon is still running.
+ 
+\layout Subsubsection
+
+Status
+\layout Standard
+
+A much more complicated test to see if the demon is still running.
+ This command will return a veritable slew
+\begin_inset Foot
+collapsed false
+
+\layout Standard
+
+As opposed to a veritable slough, which would only get your feet wet as
+ you traversed it.
+ Yes, right now, it is very late in the day.
+ Or very early in the morning.
+ 
+\end_inset 
+
+ of information about what the demon is doing, including shutter and gain
+ values, status of other flags, and a list of collections either scheduled
+ or in process.
+ The output is readable directly, but a script called 'ipcstat' is available
+ that queries all cameras it finds and returns a better formatted output.
+ 
+\layout Subsubsection
+
+endAll
+\layout Standard
+
+Instructs the demon to end all currently active collections (by setting
+ the number of remaining frames for each collection to 1).
+ If you start a bunch of collections by accident, this command will cleanly
+ terminate anything that is active.
+ It will not end anything not yet active.
+\layout Subsubsection
+
+cleanSlot
+\layout Standard
+
+Removes the scheduled collection from the specified 
+\begin_inset Quotes eld
+\end_inset 
+
+slot
+\begin_inset Quotes erd
+\end_inset 
+
+ in the list.
+ 
+\begin_inset Quotes eld
+\end_inset 
+
+./send 1 cleanSlot 4
+\begin_inset Quotes erd
+\end_inset 
+
+ removes the entry in slot 4 for camera 1.
+ This is how you remove collections that haven't started yet.
+ 
+\layout Subsubsection
+
+autoShutter
+\layout Standard
+
+Enable or disable the autoexposure processing in the demon.
+ This command takes three parameters.
+ The first is the lower limit, the second is the upper limit, and the third
+ is the 
+\begin_inset Quotes eld
+\end_inset 
+
+skip
+\begin_inset Quotes erd
+\end_inset 
+
+ value.
+ Perhaps a longer explanation is necessary? The autoexposure code in the
+ demon
+\begin_inset Foot
+collapsed false
+
+\layout Standard
+
+Why does the demon need autoexposure code? Doesn't the camera have an auto
+ setting for integration time and gain? Well, two reasons.
+ First, some IIDC cameras will not do autoexposure at all if they are in
+ external trigger mode.
+ Second, the autoexposure settings are indirect and difficult to predict
+ results.
+ Third, shutter and gain are recorded with each stack line and raw image
+ frame, so I'd have to ask the camera what they were each time anyway.
+ And fourth, I apparently can't count to three.
+\end_inset 
+
+ operates by averaging the value of every 
+\begin_inset Quotes eld
+\end_inset 
+
+skip
+\begin_inset Quotes erd
+\end_inset 
+
+th pixel and comparing it to the low and high limit.
+ If the average is below the low limit, the autoexposure code first tries
+ to increase the integration time, and if the integration time exceeds the
+ limit (see 
+\begin_inset Quotes eld
+\end_inset 
+
+intLimit
+\begin_inset Quotes erd
+\end_inset 
+
+ coming next), it increases the gain.
+ If the average is above the high value, it first tries decreasing gain
+ (until it gets to zero), and then decreases integration time.
+ 
+\layout Standard
+
+Setting the high limit to 0 disables the autoexposure code.
+ 
+\layout Standard
+
+Example: ./send 1 autoShutter 80 120 193
+\layout Subsubsection
+
+intLimit
+\layout Standard
+
+Specify the integration time upper limit for the camera auto-exposure mode.
+ In other words, the camera integration time will not be longer than this
+ value in seconds.
+ Caveat: there is about a ten percent overshoot possible in the autoexposure
+ code, and you can SET the shutter to a value longer than this manually.
+ Example: 
+\begin_inset Quotes eld
+\end_inset 
+
+./send 1 intLimit 0.01
+\begin_inset Quotes erd
+\end_inset 
+
+
+\layout Subsubsection
+
+AESpot
+\layout Standard
+
+Obsolete and deprecated command that attempted to emulate the Sony camara,
+ which allowed the user to select regions of the image to control autoexposure.
+ 
+\layout Subsubsection
+
+dumpAutoList
+\layout Standard
+
+Dumps the pixel list being used to select pixels averaged by the autoexposure
+ code.
+ Interesting for debugging autoexposure code, not so interesting to the
+ normal user.
+\layout Subsubsection
+
+blockAverage
+\layout Standard
+
+Average the intensity of all but the first 100 pixels in the next frame
+ and return the value.
+ For the life of me, I can't recall now why I wrote this command then.
+ Maybe I'll remember by the time this manual appears in public.
+ No, still haven't remembered.
+\layout Subsubsection
+
+offsetTest
+\layout Standard
+
+Obsolete, but I remember why I wrote this one.
+ Sony cameras (and some firewire controllers included on motherboards) tended
+ to drop packets from incoming frames.
+ Each frame is sent from the camera to the CPU as a series of packets of
+ data, instead of the entire frame at once.
+ If one packet is lost, the image that is produced has an easily detected
+ (by eye) shift.
+ The edges of the image appear in the middle, and in cases of serious shifts,
+ the top and bottom are in the middle, too.
+ 
+\layout Standard
+
+The 
+\begin_inset Quotes eld
+\end_inset 
+
+offset test
+\begin_inset Quotes erd
+\end_inset 
+
+ calculated the sum of each image column, then determined the difference
+ between adjacent sums and reported the maximum.
+ In theory, a bad image would have a vertical structure that would result
+ in a large difference.
+ In practice, Point Grey cameras did better, and some scenes contain a vertical
+ structure that fools the offset test.
+ The command remains, the code has been commented out.
+\layout Subsubsection
+
+pauseRaw
+\layout Standard
+
+Suspend all raw data file collection.
+ 
+\layout Subsubsection
+
+takeRaw
+\layout Standard
+
+Take the specified number of raw frames.
+ E.g., 
+\begin_inset Quotes eld
+\end_inset 
+
+./send 1 takeRaw 20
+\begin_inset Quotes erd
+\end_inset 
+
+ would take twenty raw frames and then suspend.
+ This command, when combined with 'pauseRaw', allows fine control over data
+ collection, with other parameter changes in between collections, but keeping
+ one data file.
+ E.g., after starting a raw collection of 10000 frames and then immediately
+ issuing a 'pauseRaw', the user (me) could issue gain or shutter setting
+ commands, followed by 'takeRaw 10' to gather ten raw frames.
+ Another gain or shutter change, another takeRaw...
+ This allows easy programming of diagnostic images (ranges of gain and shutter
+ for the same scene) and results in just one output file to save and process.
+\layout Subsubsection
+
+stopStack
+\layout Subsubsection
+
+goStack
+\layout Standard
+
+Same concept as pauseRaw and takeRaw, except goStack does not take a count
+ of stack lines to take, it just continues the stack that was paused by
+ stopStack.
+\layout Subsubsection
+
+dumpPixlist
+\layout Standard
+
+Dumps the contents of the internal pixel list for all of the current or
+ scheduled stacks to the output log file ('/tmp/cam0X.log'
+\begin_inset Foot
+collapsed false
+
+\layout Standard
+
+Did I mention, the HOTM process maintains a log file in /tmp named cam0X.log,
+ where X is the physical camera number.
+ It records several things, mainly autoexposure changes, but also logs missing
+ frames.
+ This log file can grow to be large over time, so see 
+\begin_inset Quotes eld
+\end_inset 
+
+flushLog
+\begin_inset Quotes erd
+\end_inset 
+
+ coming up.
+\end_inset 
+
+).
+ Useful for debugging to see that what you put in is what the demon thinks
+ you said, but not much use otherwise.
+\layout Subsubsection
+
+lastSeen
+\layout Standard
+
+Send back the epoch time (in fractional seconds) of the last frame processed
+ by the demon.
+ The output is reported in seconds and microseconds, without a decimal point.
+ 
+\layout Subsubsection
+
+noAutoWhenCollecting
+\layout Standard
+
+A boolean flag which enables or disables autoexposure mode while a data
+ collection is in progress.
+ 
+\begin_inset Quotes eld
+\end_inset 
+
+./send 1 noAutoWhenCollecting 1
+\begin_inset Quotes erd
+\end_inset 
+
+ enables it, 0 disables it.
+ 
+\layout Subsubsection
+
+noAutoOnStacks
+\layout Standard
+
+Same concept as noAutoWhenCollecting, except limited to stack collections.
+ Note that a stack being collected at the same time as any non-stack will
+ result in no autoexposure for the non-stack data as well.
+ This flag simplifies stack processing significantly if you are trying to
+ do quantitative intensity work.
+ I could have said that about the previous command, too.
+\layout Subsubsection
+
+flushLog
+\layout Standard
+
+Close, truncate, and reopen the camera log file (/tmp/cam0X.log).
+ A daily flushLog is good for the soul, and for your /tmp directory too.
+ Notice that some distributions of Linux (or Unix) do a cleanup of /tmp
+ every so often, which can result in the open log file being removed from
+ the directory but not from the disk.
+ If you ever see an Argus station where the root disk says 100% full and
+ you cannot find the offending files, try a flushLog.
+\layout Subsubsection
+
+masquerade
+\layout Standard
+
+Pretend to be a different virtual camera than your assigned physical number.
+ Use the masquerade number in output file names, and all visible recorded
+ parameters, but keep the same message queue id.
+ 
+\layout Subsubsection
+
+setcamera
+\layout Standard
+
+Modify the specified camera parameter in the specified way.
+ Ok, more info needed.
+ 
+\layout Standard
+
+Setcamera takes three parameters.
+ The first is the action requested.
+ The second parameter is the feature to be set.
+ The final parameter depends on the requested action.
+ Allowed actions are CAM_SET (set the feature value to the third parameter)
+ or CAM_SCALE (multiply the current value by the third parameter.) For example:
+ 
+\begin_inset Quotes eld
+\end_inset 
+
+./send 1 setcamera cam_set feature_shutter 0.01
+\begin_inset Quotes erd
+\end_inset 
+
+ instructs the demon to set the camera shutter to 0.01 seconds.
+ 
+\begin_inset Quotes eld
+\end_inset 
+
+./send 1 setcamera cam_scale feature_gain 2
+\begin_inset Quotes erd
+\end_inset 
+
+ causes the camera gain to be set to two times the current value.
+ 
+\layout Standard
+
+This command is critical for setting the camera to a known starting condition
+ following the imposition of an integration limit, for example.
+ You can use the intLimit command to set a limit, but if the camera is already
+ above that limit, it will stay there (until autoexposure brings it down).
+ So, the sequence of commands:
+\layout LyX-Code
+
+autoShutter 80 120 168
+\layout LyX-Code
+
+intLimit 0.10
+\layout LyX-Code
+
+setcamera cam_set feature_shutter 0.0001
+\layout LyX-Code
+
+setcamera cam_set feature_gain 0 
+\layout Standard
+
+will put the camera into a valid range for gain and shutter after starting
+ autoexposure and imposing the integration time limit.
+ These commands are normally
+\begin_inset Foot
+collapsed false
+
+\layout Standard
+
+In CIL-managed Argus stations.
+\end_inset 
+
+ found in a file named 
+\begin_inset Quotes eld
+\end_inset 
+
+cam0X.startup
+\begin_inset Quotes erd
+\end_inset 
+
+ which is processed by the script that initiates the HOTM program
+\begin_inset Foot
+collapsed false
+
+\layout Standard
+
+A perl script called startup.pl, which sets a path for library searches,
+ starts the HOTM program (with elevated priority), waits for the demon message
+ queue to be created, and then sends the commands in the cam0X.startup file.
+ 
+\end_inset 
+
+.
+ 
+\layout Subsubsection
+
+openSHM/closeSHM
+\layout Standard
+
+The entire next section of this manual (The Show Module) deals with a module
+ written before this pair of demon commands was added.
+ 
+\layout Standard
+
+This pair of commands manages the shared data memory operation of the demon
+ module.
+ OpenSHM creates three separate shared memory areas: the image header, the
+ camera module, and the data sections.
+ The camera module shared memory area is a copy of the cameraModule structure
+ used by HOTM to remember camera parameters.
+ The image header area is a copy of the image header attached to each frame,
+ and the data area is a copy of the frame itself.
+\layout Standard
+
+The program 
+\begin_inset Quotes eld
+\end_inset 
+
+postshow
+\begin_inset Quotes erd
+\end_inset 
+
+ was written to access these shared memory regions and display the image
+ contained therein.
+\layout Standard
+
+Unlike the 'raw' data file produced by the demon, there is no guarantee
+ that a program accessing data via the shared memory will see every frame.
+ The demon sets a semaphore indicating the data are valid when it is copied
+ into the memory area.
+ The processing program clears the semaphore when it is done accessing the
+ data.
+ If a frame would be collected by the demon while the semaphore is still
+ set, it will not be copied to the shared memory.
+ It will still be written to the raw file.
+\layout Section
+
+The Show Module
+\layout Standard
+
+You might have noticed that there is no convenient way to look at the images
+ coming from the cameras anymore.
+ With an NTSC analog camera, you could simply tap the analog signal off
+ and display it on any standard NTSC monitor.
+ You cannot tap the firewire signal.
+ There is no simple display device you can plug a firewire camera into to
+ watch what it is doing.
+\layout Standard
+
+The 'show' module was written to help with that problem.
+ It is a demonstration of how to write a data processing module and an image
+ display method in one! It uses the SDL (Simple Display Library) to open
+ an X window and then paint each incoming image into the frame.
+ Because it uses X, it cannot be run remotely without an X connection.
+ That means it can be run over a tunneled SSH X connection, but it is VERY
+ slow.
+ 
+\layout Subsection
+
+Show Parameter:Value Pairs
+\layout Standard
+
+The 'show' module has the following parameter:value pairs.
+\layout Subsubsection
+
+showModulo
+\layout Standard
+
+Set a modulo value for the pixel increment.
+ I.e., 
+\begin_inset Quotes eld
+\end_inset 
+
+every other pixel
+\begin_inset Quotes erd
+\end_inset 
+
+, 
+\begin_inset Quotes eld
+\end_inset 
+
+every third
+\begin_inset Quotes erd
+\end_inset 
+
+, etc.
+ showModule takes a single integer value, defaulting to 1 if unset.
+\layout Subsubsection
+
+showVerbose
+\layout Standard
+
+Set the verbose output flag to the value specified.
+\layout Section
+
+Example Configuration Files
+\layout Standard
+
+Here are a set of example configuration files typical to CIL Argus stations.
+ The decision of where to put a parameter:value pair is often arbitrary.
+ Remember, it doesn't really matter in what file they appear, it is a convenienc
+e for the admin to keep camera paramters in a camera file, and other module
+ paramteres in another file.
+ 
+\layout Subsection
+
+Command Line Options from Startup.pl
+\layout Standard
+
+HOTM is executed with the following command line options from normal version
+ of startup.pl, using camera 1 as an example:
+\layout LyX-Code
+
+hotm -c 1 cdisk cam1
+\layout Standard
+
+From that command, you can determine that we need two parameter files, one
+ named 'cdisk' and one named 'cam1'.
+ Startup.pl will also look for the file 'cam01.startup' for runtime camera
+ parameters.
+\layout Subsection
+
+cdisk
+\layout Standard
+
+This is an example 'cdisk' file.
+ Note that it contains information common to all cameras at a site.
+\layout LyX-Code
+
+# all common params 
+\layout LyX-Code
+
+sitename: testfoo 
+\layout LyX-Code
+
+programVersIon: argus2.0 
+\layout LyX-Code
+
+debug: -1 
+\layout LyX-Code
+
+verbose: -1 
+\layout LyX-Code
+
+module: demon 
+\layout LyX-Code
+
+diskVerbose: -1 
+\layout LyX-Code
+
+module: show 
+\layout LyX-Code
+
+showmodulo: 3 
+\layout LyX-Code
+
+#module: focus 
+\layout LyX-Code
+
+#diskframes: 30 
+\layout Subsection
+
+cam1
+\layout Standard
+
+This is an example 'cam1' file.
+ It contains paramters specific to the camera.
+ 
+\layout LyX-Code
+
+cameramodule: micropix 
+\layout LyX-Code
+
+cameraNumber: 1 
+\layout LyX-Code
+
+Cameraverbose: 31 
+\layout LyX-Code
+
+#cameraMode: MODE_640x480_RGB 
+\layout LyX-Code
+
+#cameraMode: MODE_640x480_YUV422 
+\layout LyX-Code
+
+#cameraFormat: FORMAT_VGA_NONCOMPRESSED #cameraFrameRate: FRAMERATE_3_75
+ 
+\layout LyX-Code
+
+#cameraBrightness: -3 
+\layout LyX-Code
+
+#cameraSharpness: 64 
+\layout LyX-Code
+
+#cameraGamma: 1 
+\layout LyX-Code
+
+#cameraIris: 4 
+\layout LyX-Code
+
+cameraGain: 0 
+\layout LyX-Code
+
+cameraShutter: 3 
+\layout LyX-Code
+
+#cameraExposure: -3 
+\layout LyX-Code
+
+#cameraWhite Balance: 15388 
+\layout LyX-Code
+
+#cameraHue: -4 
+\layout LyX-Code
+
+#cameraSaturation: 106 
+\layout Standard
+
+Note that most of the paramters are commented out.
+ Good programmers don't remove code just because it isn't used anymore.
+ This file overrides the command line specification of camera number; we
+ could comment that line out of this file.
+ The camera gain (0) and shutter setting (3) will be overridden later by
+ the autoshutter code in demon and could be commented out, too.
+ That would leave us with just the module name and verbose flag.
+ 
+\layout Standard
+
+This file also demonstrates the deprecated method of setting camera white
+ balance.
+\begin_inset Foot
+collapsed false
+
+\layout Standard
+
+And because it is deprecated I am not even going to tell you what the value
+ means or how to generate it.
+ Use the cam01.startup file to set it in a logical way.
+\end_inset 
+
+ 
+\layout Subsection
+
+cam01.startup
+\layout Standard
+
+This is an example of the 'cam01.startup' file.
+ The lines in this file are read by startup.pl and send as commands to the
+ demon one by one.
+\layout LyX-Code
+
+autoShutter 80 120 168 
+\layout LyX-Code
+
+intlimit .10 
+\layout LyX-Code
+
+setcamera cam_set my_feature_white_balance_r 64 
+\layout LyX-Code
+
+setcamera cam_set my_feature_white_balance_b 64
+\layout LyX-Code
+
+setcamera cam_set feature_shutter 0.000125 
+\layout LyX-Code
+
+setcamera cam_set feature_gain 0 
+\layout Standard
+
+This file sets an integration time upper limit of 0.10 seconds an initial
+ integration time of 0.000125 seconds and a gain of 0dB.
+ Because autoShutter is enabled (the upper limit is greater than 0), the
+ integration time will be slowly increased until the autoShutter boundaries
+ are met (up to the limit of 0.1s), and then the gain will be boosted, if
+ necessary.
+ 
+\layout Standard
+
+The red and blue white balance values are both set to 64.
+ The proper values need to be determined for each camera and site.
+ The best way to do this is to observe non-clipping white objects in the
+ image (i.e., R, G, and B all less than 255).
+ Determine the factor to multiply the red pixel by to make it equal to green.
+ Multiply the current R white balance number by that, and use that in place
+ of 64 for the white balance R.
+ Do the same for the blue.
+ Your results will be very close, but may require some adjustment.
+ 
+\layout Standard
+
+Of course, different models of cameras have different unity levels for white
+ balance.
+ You will need to study the documentation for your camera model to see what
+ the unity value should be, and replace '64' in the above discussion with
+ that.
+ If you use the Point Grey or Coriander camera software, you can also perform
+ white balances and record the exact numbers they report.
+\layout Subsection
+
+cameraMapping
+\layout Standard
+
+For HOTM to be able to locate camera 1, there must be an entry for it in
+ the 'cameraMapping' file.
+ Here is a short example.
+\layout LyX-Code
+
+1  0x0001687307420056 
+\layout LyX-Code
+
+2  0x000A4701010520F3 
+\layout LyX-Code
+
+#2 0x00B09D01003FF1D8 
+\layout LyX-Code
+
+3  0x00B09D010041EC93 
+\layout LyX-Code
+
+#2 0x0800460200060936 
+\layout LyX-Code
+
+#3 0x0800460200060938 
+\layout Standard
+
+This file comes from a system where cameras are swapped on a regular basis.
+ Each camera has a different UID and requires an entry in this file.
+ If you mistype the UID in this file, HOTM will complain very loudly that
+ it cannot find a camera with the specified UID on any bus.
+ If you fail to have an entry for a requested camera number, HOTM will also
+ complain loudly and refuse to start.
+ 
+\layout Subsubsection*
+
+A further note about UIDs and cameras and the firewire bus
+\layout Standard
+
+Some Argus Stations require multiple IEEE1394 interface cards.
+ In 1394 terms, each card creates one 'port', also referred to as a 'bus'.
+ All of the firewire connectors on an interface card are connected to the
+ same bus.
+ Each device connected to a bus becomes a 'node'.
+ Whenever a node is connected (or disconnected), the entire bus goes through
+ a reset procedure which may result in the node number changing for some
+ or all of the devices.
+ This reset process is rather complicated and beyond the scope of this manual,
+\begin_inset Foot
+collapsed false
+
+\layout Standard
+
+But not beyond the scope of 
+\begin_inset Quotes eld
+\end_inset 
+
+FireWire System Architecture
+\begin_inset Quotes erd
+\end_inset 
+
+ by Don Anderson, published by MindShare.
+ 
+\end_inset 
+
+ but it includes bus mapping and speed detection.
+ Devices are accessed by port and node number.
+ They are identified by their UID and other information that can be read
+ from each device, but all reads and writes of data to devices are based
+ on the port and node number.
+\layout Standard
+
+NOTE: that's why unplugging a device from a bus with a camera being controlled
+ by a HOTM can, and probably will, cause HOTM to crash.
+ It is trying to talk to a camera at a certain node, and you are causing
+ the node number to change.
+ Eventually, HOTM will stop getting frames from that camera and the program
+ will exit.
+ Maybe.
+\layout Standard
+
+When HOTM starts, it searches all available ports looking for a node with
+ the UID associated with the camera number in the mapping file.
+ Once it locates the port and node that contain that camera, all further
+ accesses are by port and node numbers.
+ 
+\layout Subsection
+
+cameraData
+\layout Standard
+
+As part of the data returned to HOTM from the system when it locates the
+ camera with the correct UID, along with port and node, is a string identifying
+ the camera model.
+ HOTM then scans the file 'cameraData' for default camera information.
+ Here's an example (remember, each model is on one line, but for display
+ here lines have been wrapped.)
+\layout LyX-Code
+
+Scorpion SCOR-14SOC:
+\layout LyX-Code
+
+FORMAT_SVGA_NONCOMPRESSED_2:
+\layout LyX-Code
+
+MODE_1280x960_MONO:
+\layout LyX-Code
+
+FRAMERATE_7_5:1280:960:1280:960:1:1 
+\layout LyX-Code
+
+Scorpion SCOR-14SOM:
+\layout LyX-Code
+
+FORMAT_SVGA_NONCOMPRESSED_2:
+\layout LyX-Code
+
+MODE_1280x960_MONO:
+\layout LyX-Code
+
+FRAMERATE_7_5:1280:960:1280:960:1:1 
+\layout Standard
+
+These identify the color and monochrome versions of the Scorpion camera
+ that is standard for Argus Stations.
+ If you have a camera that is not listed in this file, HOTM will first report
+ the model name
+\begin_inset Foot
+collapsed false
+
+\layout Standard
+
+You may need to set verbose mode to cause camera parameters to be listed
+ to get the model name output.
+\end_inset 
+
+, and then exit because it doesn't find a match.
+\layout Section
+
+Notes About Important Things That Haven't Been Discussed Yet
+\layout Subsection
+
+A Note About The Time and How It Is Determined
+\layout Standard
+
+Raw and stack files contain specific information about the time of collection
+ of each line or frame.
+ How is this time determined, and why can it be wrong?
+\layout Standard
+
+Each frame coming from a firewire camera comes with a 
+\begin_inset Quotes eld
+\end_inset 
+
+filltime
+\begin_inset Quotes erd
+\end_inset 
+
+ parameter.
+ This is a unix-style timeval struct, which gives the epoch time in seconds
+ and microseconds.
+ To determine the time, add the seconds value to the microseconds value
+ divided by 1,000,000.
+ This time is dependent upon the CPU system clock AND the amount of time
+ required to send the frame across the bus.
+ It does NOT represent the actual time the frame was collected.
+ As a first approximation, early versions of hotm simply subtracted half
+ the integration time from the filltime, assuming that the transmission
+ time was consistent during collection.
+ 
+\layout Standard
+
+This method has issues, especially when trying to correlate hotm data with
+ other collection systems.
+ catitapianca@gmail.catitapianca@gmail.comcom
+\layout Standard
+
+As a second approximation
+\begin_inset Foot
+collapsed false
+
+\layout Standard
+
+in a version never used in public, for reasons that will become clear.
+\end_inset 
+
+, hotm attempted to determine the true bus transmission time for each frame.
+ Here's how.
+ Each frame is broken down into packets.
+ If you know the packet size (or can guess it) you can know how many packets
+ there are.
+ Each packet requires one bus 
+\begin_inset Quotes eld
+\end_inset 
+
+cycle
+\begin_inset Quotes erd
+\end_inset 
+
+ to be transmitted.
+ In fact, the timing of one bus cycle plays a large part in the amount of
+ data that can be sent across the bus, since packets cannot take longer
+ than one bus cycle.
+ Each bus cycle is 125 microseconds long; alternatively, there are 8000
+ cycles per second.
+ If you know that your frame is broken down into 100 packets, then you know
+ it took 100/8000 second to cross the bus.
+ 
+\layout Standard
+
+Unfortunately, standard formats for Pt.
+ Grey cameras do not allow one to query the size of packets.
+ Packet size may be queried under FORMAT 7.
+ Without knowing the packet size, one cannot calculate the number of packets
+ per frame.
+\begin_inset Foot
+collapsed false
+
+\layout Standard
+
+And because the number of bytes per packet must be the same for every packet,
+ and must also meet other bus-related limits, it is impossible to know exactly
+ how many bytes are sent across the bus for each frame.
+ It is often more than the simple multiplication of width times height times
+ bytes per pixel.
+\end_inset 
+
+
+\layout Standard
+
+While Pt.
+ Grey takes some things away, it also gives us something of value.
+ Pt.
+ Grey cameras have a mode in which they insert certain camera data into
+ the first few bytes of every frame.
+ This includes the cycle time that the frame was collected (shutter close).
+ This time is used by Pt.
+ Grey cameras to allow multi-camera synchronization between free-running
+ cameras.
+ It consists of three parts.
+ 1) a second count (0-127), 2) a cycle count (0-7999), and 3) a cycle offset
+ (0-3071) counting a 24.576MHz clock.
+ This cycle time information is maintained from every object on the bus
+ that deals with isochronous transfers, including the bus interface itself.
+\layout Standard
+
+By itself, this information is insufficient to determine real time.
+ To tie the cycle time value to real time, one must query the camera cycle
+ time register and the system epoch time simultaneously.
+ Then it is trivial to compare the frame time to the cycle time at the known
+ system time and correct the system time appropriately.
+ To reduce errors due to bus and system latency, the cycle time is queried
+ both before and after a request for the system time and the two values
+ averaged.
+ In algebraic terms:
+\layout LyX-Code
+
+E = S + F - (C1+C2)/2
+\layout Standard
+
+where S is the system epoch time, C1 and C2 are the two camera cycle times,
+ F is the cycle time recorded in the frame, and E is the true epoch time
+ when the frame was collected.
+ C1, C2, and F all have the possibility of overflowing, and this is dealt
+ with in hotm.
+ To give the mean time of collection (average of open shutter and close
+ shutter), one half the integration time is subtracted.
+\layout Standard
+
+One important note for Pt.
+ Grey cameras is that free-running cameras synchronize themselves so the
+ CLOSE of shutter occurs at the same time on all cameras.
+ (Because free-running cameras on the same bus sync automatically, more
+ recent Argus Stations have omitted the expensive external trigger hardware.)
+ Only when using external trigger mode do the cameras OPEN the shutter at
+ the same time.
+ 
+\layout Standard
+
+This latter method is now being distributed to Argus Stations and will become
+ the standard.
+\layout Subsection
+
+A Note About IEEE1394 Busses and Camera Frame Rates
+\layout Standard
+
+Here's a can of worms.
+ See them squirm? Each firewire bus (or port) has a maximum data rate which
+ limits the frame rate that you can use.
+ These are some of the considerations.
+\layout Standard
+
+A 400MBit/s firewire bus has a limit of 320MB/s for isochronous data.
+ 'Iso' data is data that is transmitted in a time-sensitive way.
+ That includes camera image data.
+ (Camera commands are asynchronous data.) A camera is instructed to take
+ frames at a certain rate.
+ Even a camera that is told to operate in 
+\begin_inset Quotes eld
+\end_inset 
+
+external trigger
+\begin_inset Quotes erd
+\end_inset 
+
+ mode has a regular frame rate assigned, either by default (fastest rate
+ for a commanded mode) or explicitely (by command from HOTM).
+ As long as the camera is able to achieve that rate, frames will be ready
+ to send whether anyone has done anything with the previous frame or not.
+ If the bus is busy doing something else, you can lose frames.
+ To avoid this issue, 80% of the bus bandwidth is allocated to 
+\begin_inset Quotes eld
+\end_inset 
+
+iso
+\begin_inset Quotes erd
+\end_inset 
+
+, or time-dependent data.
+ The remainder of the bus is allocated to asynchronous data, such as that
+ from disks.
+ Disk data can be buffered and if you don't get a block right now you don't
+ lose the following one.
+\layout Standard
+
+Each camera knows that it must transmit its data within a time period less
+ than the frame rate.
+ For cameras operating in triggered mode, the actual frame rate may be anything
+ from zero up to a maximum of the programmed frame rate.
+ I.e., a camera set to send 3.75fps and then put in external trigger mode cannot
+ be triggered faster than 3.75fps, and that camera assumes that it has just
+ 1/3.75 seconds to send it's frame even if it is being triggered at only
+ 1/10 Hz.
+\layout Standard
+
+A Scorpion 14SO camera has 1280 by 960 pixels, for a total of 1,228,800
+ bytes.
+ (In 16 bit mono mode, it will require 2,457,600 bytes to send a frame.)
+ That frame at 3.75fps results in a data rate of 4.6Mbytes/s (almost 37MBits/s).
+ At 7.5fps, that's 74MBits/s.
+ On a bus that allows 320MBits/s, you can have only 4 such cameras running
+ at the same time before you overflow the bus capabilities, if they are
+ set to 7.5fps.
+ You get 8 cameras on a bus at 3.75fps.
+ But remember that applies to the Scorpion in 8 bit mode.
+ You can have more than 8 cameras if the frames are smaller.
+\layout Standard
+
+Uhhh, no.
+ Sorry.
+ Thanks for playing.
+ There's another problem.
+ It's buried deep in the technical standards.
+ Each camera sending data on a bus requires a set of control registers in
+ the host firewire interface called an 'isochronous receive context'.
+ This 'context' controls and defines the isochronous transmission.
+ The Open Host Controller Interface (OHCI) standard calls for a minimum
+ of four receive contexts in a conforming interface -- and that's what most
+ OHCI interface cards implement.
+ Four.
+ This is a hard-limit on the number of running cameras on a bus controlled
+ by that interface
+\begin_inset Foot
+collapsed false
+
+\layout Standard
+
+There are other limits on the number of NON-running cameras on a bus, but
+ we've yet to reach that limit.
+ The ISO context limit applies only to cameras that are actively being controlle
+d by a HOTM process.
+ 
+\end_inset 
+
+.
+ 
+\layout Standard
+
+There are OHCI controllers that have 8 contexts.
+ Unfortunately, almost NO vendors of IEEE1394 cards ever tell you this number,
+ or which integrated circuits (
+\begin_inset Quotes eld
+\end_inset 
+
+chipsets
+\begin_inset Quotes erd
+\end_inset 
+
+) are being used to produce the card (and by looking them up online, the
+ number of contexts.) At least one scurilous chip manufacturer actually reduced
+ the number of contexts in its product with NO notice and NO change in the
+ chip identifier.
+ Just BLAMMO! One copy of their interface card WOULD run 8 cameras, and
+ another apparently identical one would NOT.
+ 
+\layout Standard
+
+One chipset that does support 8 contexts is produced by Agere, called the
+ FW323.
+ One online dealer actually announces that they are selling 
+\begin_inset Quotes eld
+\end_inset 
+
+Agere
+\begin_inset Quotes erd
+\end_inset 
+
+ controllers.
+ We loves them.
+ They deserve a place in Heaven.
+ 
+\layout Standard
+
+What is the point of this section? The more cameras you need to support
+ on a system, the slower they must be set to run, or you need to install
+ more 'ports'.
+ The number of ports is limited by the number of expansion slots (PCI, usually)
+ the computer has available.
+ One current Argus system has three ports installed.
+ Two ports is not unusual.
+ 
+\the_end

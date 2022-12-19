@@ -1,0 +1,16 @@
+-nsaf
+-nsai
+-nsaw
+-prs
+-i5
+-nut
+-br
+-cli5
+-nbacc
+-nbap
+-ncdb
+-nce
+-nfc1
+-psl
+-nsai
+-npcs

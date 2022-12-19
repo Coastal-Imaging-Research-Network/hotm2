@@ -1,0 +1,10 @@
+#./hotm  call cam1
+#./hotm  call cam2
+#./hotm  call cam3
+#./hotm  callt call cam4
+#./hotm  call cam5
+#./hotm  call cam6
+#./hotm  call cam8
+#./hotm  call cam9
+./hotm -c 12 call timer cam11b
+./hotm -c 11 call cam11b

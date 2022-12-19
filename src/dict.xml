@@ -1,0 +1,7 @@
+<dictionary>
+<tag> <value>0</value> <type>compressed</type> <name>zip</name> </tag>
+<tag> <value>1</value> <type>double</type> <name>epoch</name> </tag>
+<tag> <value>2</value> <type>double</type> <name>shutter</name> </tag>
+<tag> <value>3</value> <type>double</type> <name>gain</name> </tag>
+<tag> <value>100</value> <type>blob</type> <name>data</name> </tag>
+</dictionary>

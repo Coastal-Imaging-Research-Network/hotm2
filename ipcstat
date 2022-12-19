@@ -1,0 +1,86 @@
+#! /usr/bin/perl
+
+($uptime,$junk) = split( ' ', `cat /proc/uptime` );
+$now = time;
+
+open( IPC, "</proc/sysvipc/msg" ) || die "cannot open proc/msg file: $!\n";
+
+$hundef = <IPC>; # first line junk
+
+while( <IPC> ) {
+	($key,$rest) = split( ' ', $_, 2 );
+	$ipc{$key} = $rest;
+	$key = (split(' ', $_ ))[6];
+	$pid{$key} = $_;
+}
+close IPC;
+
+foreach $i ( 0 .. 18 ) {
+
+	$rest = $ipc{$i};
+	do {
+		print "camera $i -----------------------------\n";
+		$hisPid = (split(' ', $rest))[5];
+		$active = -d "/proc/$hisPid";
+		print "cam $i queue exists, process is ";
+		print $active? "alive" : "missing";
+		do { print "\n"; next; }  unless $active;
+		$jiffies = (split(' ', `cat /proc/$hisPid/stat`))[21];
+		$vmsize = (split(' ', `cat /proc/$hisPid/stat`))[22];
+		$rssize = (split(' ', `cat /proc/$hisPid/stat`))[23];
+		$jiffies = $jiffies/100;
+		$when = $now - $uptime + $jiffies;
+		print " since " . scalar(localtime($when));
+		print "\n";
+		$len = $now - $when; $len2 = int($len*2);
+		print " running for about " . int($len) . " seconds (" . int($len2) . " frames)\n";
+		printf " consuming %d virtual (%d pages RSS)\n", $vmsize, $rssize; 
+		
+		do {
+			undef @input;
+			open( I, "./send $i status |" );
+			while( <I> ) {
+				chomp;
+				push @input, $_;
+			}
+			close I;
+			print substr( shift @input, 3, 200 );
+			print " (time count: $len2)\n";
+			print substr( shift @input, 3, 200 );
+			print "\n";
+			print substr( shift @input, 3, 200 );
+			print "\n";
+			print substr( shift @input, 3, 200 );
+			print "\n";
+			print substr( shift @input, 3, 200 );
+			print "\n";
+# slot 0:   25(0) pid  8725 NO QUEUE! -> /home/users/stanley/hotm/1061929123.c4.stack.ras
+			print "slot  left    pid QP Destination\n";
+			while( $#input > 0 ) {
+#3: slot  9:   100 more (skip 0) (start 1061929280.066483) for pid  8974 to /home/users/stanley/hotm/1061929280.c3.stack.ras with pixlist
+
+				($j,$j, $slot,$left, $j, $j, $skip, $j, $start, $j, 
+				  $j, $mypid, $j, $dest, $j, $pix ) = split( ' ', shift @input );
+				$q = $pid{$mypid};
+				printf " %s %4d(%s", $slot, $left, $skip;
+				printf " %5d ", $mypid;
+				print defined $q? "Q" : " ";
+				print defined $pix? "P": " ";
+				print " $dest";
+				print "\n";
+			}
+
+#3: camera 4 active and alive, MSC at 179541
+#3: current gain: 2048 shutter: 2840 intTime: 0.000702
+#3: autoShutter is active, limits 30:20 int limit: 0.300000
+#3: slot  0:   545 more (skip 1) (start 1060989310.327696) for pid 30603 to /data/stanley/1060989310.c4.raw
+#2: end
+#
+	
+		} if $active;
+
+
+		next;
+	} if defined $rest;
+
+}

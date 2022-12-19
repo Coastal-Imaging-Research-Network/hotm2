@@ -1,0 +1,27 @@
+#!/usr/bin/perl
+
+# set or report the pulse period for the pulser
+
+$pg = '/home/users/stanley/collect/pg';
+
+$period = shift || goto REPORT;
+
+print "setting period to $period ms\n";
+
+$period = $period / 10 - 1;
+
+system( "$pg DECIMAL $period HEX 1FA C\!" );
+
+REPORT:
+
+$myper = 0;
+
+while( $myper == 0 ) {
+$myper = `$pg HEX 1FA C\@ DECIMAL CR . CR HEX`;
+$myper = $1 if $myper =~ /^(\d+)$/; 
+}
+
+$myper = ($myper+1) * 10;
+
+print "period is now $myper ms\n";
+

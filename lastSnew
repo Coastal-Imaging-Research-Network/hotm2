@@ -1,0 +1,87 @@
+#! /usr/bin/perl
+
+use IPC::SysV qw(IPC_PRIVATE IPC_CREAT S_IRWXU S_IRWXG S_IRWXO);
+use IPC::Msg;
+
+@cams = ( 1, 2, 3, 4, 5, 6 );
+
+$now = time;
+$me = $$;
+$| = 1;
+$SIG{ALARM} = \&goaway;
+alarm 10;
+
+$msgIn = new IPC::Msg( $me, IPC_CREAT|S_IRWXU|S_IRWXG|S_IRWXO);
+die "recvmsg create: $!\n" if !defined $msgIn;
+
+$which = $cams[0];
+$msgOut = new IPC::Msg( $which, IPC_CREAT|S_IRWXU|S_IRWXG|S_IRWXO);
+die "sendmsg create: $!\n" if !defined $msgOut;
+$msgOut->snd( 1, pack( "L a*", $me, "status" ) );
+
+while(1) {
+	$in = $msgIn->rcv( $buf, 256 );
+	($code, $resp) = unpack( "L a*", $buf );
+	#print "$which: $resp\n";
+	$interval = $1 if $resp =~ /frameInterval: (\S+) /;
+	last unless $in == 3;
+} 
+print "Interval: $interval\n";
+print "Time: $now\n";
+
+$count=0;
+
+foreach $which (@cams) {
+	$msgOut = new IPC::Msg( $which, IPC_CREAT|S_IRWXU|S_IRWXG|S_IRWXO);
+	die "sendmsg create: $!\n" if !defined $msgOut;
+
+	$msgOut->snd( 1, pack( "L a*", $me, "lastSeen" ) );
+
+	$count++;
+
+}
+
+	while($count) {
+		$in = $msgIn->rcv( $buf, 256 );
+		($code, $resp) = unpack( "L a*", $buf );
+		print "$resp\n";
+		$ans{$count} = $resp;
+		$count--;
+}
+
+
+$msgIn->remove;
+
+alarm 0;
+
+$minw = 999999999999990; $maxw = 0;
+$tref = 0; # reference time is LAST arriving
+
+foreach $i ( sort keys %ans ) { # in array in reverse order of arrival
+
+	@w = split(' ', $ans{$i} );
+
+	$t = $w[1] + $w[2]/1000000;
+	$tref = $t if $tref == 0;
+
+	do {
+		$t += $interval;
+	} if $t < ($tref-($interval/2));
+	
+	$minw = $t if( $t<$minw );
+	$maxw = $t if( $t>$maxw );
+
+}
+
+$diff = $maxw - $minw;
+printf "Max: %.6f Min: %.6f Diff: %.6f ", $maxw, $minw, $diff;
+printf "ALARM! \007 \007" if $diff > .080000;
+print "\n";
+
+exit;
+
+sub goaway {
+	print "dies due to alarm\n";
+	$msgIn->remove;
+	exit;
+}

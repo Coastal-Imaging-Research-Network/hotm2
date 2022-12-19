@@ -1,0 +1,155 @@
+#!/usr/bin/perl
+
+# status check -- ping a camera demon, do something if it does not
+# respond.
+
+# I have to be told what cameras to ping, that's input
+
+$maxOffset = 1000000;
+$| = 1;
+
+use IPC::SysV qw(IPC_PRIVATE IPC_CREAT S_IRWXU S_IRWXG S_IRWXO);
+use IPC::Msg;
+
+open( LOCK, "<statusCheck" );
+flock LOCK, 6 or die "statusCheck locked: $!\n";
+
+$SIG{ALRM} = \&restart;
+
+undef @mail;
+
+# my response queue from demons
+$me = $$;
+$msgIn = new IPC::Msg( $me, IPC_CREAT|S_IRWXU|S_IRWXG|S_IRWXO);
+die "cannot make queue for answers: $!\n" if !defined $msgIn;
+
+$retryCount = 0;
+
+# for each camera I am told to check ...
+foreach $cam (@ARGV) {
+
+	next if $cam > 20;
+
+	# flag to say "I timed out."
+	$timeOut = 0; $skipAhead = 0;
+
+	$msgOut = new IPC::Msg( $cam, S_IRWXU|S_IRWXG|S_IRWXO);
+	do {
+		# no input queue, must start camera
+		print "connect to queue $cam failed, must restart\n";
+		&restart;
+		redo;
+	} if !defined $msgOut;
+	
+	# queue found, lets poke it
+	alarm 10;
+	print "poking queue $cam...";
+	$msgOut->snd( 1, pack( "L a*", $me, "ping" ) );
+
+	# lets listen for an answer
+	$in = $msgIn->rcv( $buf, 256 );
+	print "poked\n";
+	alarm 0;
+	# if I did not timeout in getting answer, show it
+	do {
+		($code, $resp) = unpack( "L a*", $buf );
+		print "cam $cam:  $resp ";
+		print "\n";
+
+	} if $timeOut == 0;
+
+	# too many, skip this one
+	next if $skipAhead;
+
+	# if I did time out, then redo the loop
+	redo if $timeOut;
+
+	# if I didn't time out, then clear retry count
+	$retryCount = 0;
+
+}	
+
+
+$msgIn->remove;
+
+do {
+	open( T, ">/tmp/restart.log" );
+	foreach $l (@mail) {
+		print T $l . "\n";
+	}
+	close T;
+	system( '/bin/mail -s restartTry stanley@coas.oregonstate.edu < /tmp/restart.log' );
+} if @mail;
+
+
+# restart a camera that is unresponsive
+sub restart {
+
+	# record that this happened
+	$timeOut++; $retryCount++;
+
+	open( L, ">restartLogCam$cam" );
+	select L; $| = 1; select STDOUT;
+	print L scalar(localtime(time)) . "\n";
+	push( @mail, scalar(localtime(time)));
+	print L "restart cam $cam try $retryCount\n";
+	push( @mail, "restart cam $cam try $retryCount" );
+
+	do {
+		print L "retry count exceeded\n";
+		push( @mail, "retry count exceeded\n");
+		$retryCount = 0;
+		$timeOut = 0;
+		$skipAhead = 1;
+		close L;
+		return;
+	} if $retryCount > 5;
+
+	# look for an errant process to kill
+	open( P, "ps -ef |" );
+	undef $pid;
+	while(<P>) {
+		$pid = $1 if /root +(\d+).+ -c $cam /;
+	}
+	close P;
+
+	do {
+		print L "detected process running, won't kill!\n";
+		push( @mail, "detected process running, won't kill!" );
+		close L;
+		$retryCount = 0;
+		$timeOut = 0;
+		$skipAhead = 1;
+		return;
+	} if defined $pid;
+
+	# start up a new one
+	print "trying startup on cam $cam...\n";
+	open( R, "./startup.pl $cam |" );
+	while(<R>) {
+		
+		print;
+
+		# cameras are confused
+		do {
+			#close R;
+			print L "power off, reload \n";
+			push( @mail, "power off, reload\n" );
+			print "power off\n";
+			system("./cameraPowerOff");
+			print "reload\n";
+			system("/usr/local/bin/reload");
+			last;
+		} if /found on any port at any node/;
+
+		# we got to the end
+		do {
+			#close R;
+			last;
+		} if /start done end/;
+	}
+
+	sleep 10;
+
+}
+

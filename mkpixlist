@@ -1,0 +1,8 @@
+#!/usr/bin/perl
+
+open( O, ">pixlist.c1.pix" );
+
+foreach $i ( 1 .. 640 ) {
+
+	print O "$i 220\n";
+}

@@ -1,0 +1,212 @@
+#! /usr/bin/perl
+
+# doCam -- do something with a camera
+#
+#  doCam camNum numFrames skipCount startTime [aoiFile]
+#
+#  normally, startTime is a startTime (epoch), special case is small
+#  values (0-10000) are a delay from "current epoch".
+#
+
+use IPC::SysV qw(IPC_PRIVATE IPC_CREAT S_IRWXU S_IRWXG S_IRWXO);
+use IPC::Msg;
+
+$nice = "/usr/sbin/nice -n 19";
+$nice = "";
+$data = ".";
+$me = $ENV{LOGNAME};
+$raw = 0;
+$newS = 0;
+
+# which camera
+$which = shift;
+do {
+	$raw++;
+	$which = shift;
+} if $which eq '-r';
+
+do {
+	$newS++;
+	$which = shift;
+} if $which eq '-ns';
+
+&Usage unless $which =~ /^\d+$/;
+
+# how many frames
+$howmany = shift;
+&Usage unless $howmany =~ /^\d+$/;
+
+# how many to skip while collecting (standard is 1 for timex, 0 for stack)
+$skip = shift;
+&Usage unless $skip =~ /^\d+$/;
+
+#when to start or delay
+$delay = shift;
+
+# find postprocGigE either here or up a level
+$postprocGigE = "./postprocGigE" if -e "postprocGigE";
+$postprocGigE = "../postprocGigE" if -e "../postprocGigE";
+
+# when is now, now is time
+$now = $when = time;
+
+# handle hardlimit delays
+do {
+	$delay = 3600 - $now%3600;
+} if $delay eq 'hour';
+
+do {
+	$delay = 60 - $now%60;
+} if $delay eq 'minute';
+
+# get the start time
+$when += $delay if $delay < 10000;
+$when = $delay if $delay > 10000;
+
+# find out where I am, so I can deal with stacks maybe
+$home = `pwd`; chomp $home;
+
+# place for temporary raw data, different disk partition, big
+$where = $home;
+$where = $home . '/' . "$when.c$which.raw" if $raw;
+
+# clear pixlist
+@pixels = ();
+
+# get aoi filename, if it is there, otherwise it is empty
+($aoi = shift) || ($aoi = '');
+
+# deal with aio pixel list here
+do {
+
+	# new home for output -- right here!
+	$where = $home . '/' . "$when.c$which.stack.ras";
+	$where =~ s/ras$/nc/ if $newS;
+	# get pixels and stuff into an array
+	open( I, "<$aoi" ) || die "cannot open aoiFile $aoi: $!\n";
+	while( <I> ) {
+		chomp;
+		($U, $V) = split( ' ', $_, 2);
+		push( @pixels, $U );
+		push( @pixels, $V );
+	}
+	
+	# strip leading path info from aoi for stack output
+	$aoi = $1 if $aoi =~ /\/([^\/]+)$/;
+
+} if $aoi ne '';
+
+# who am I so I can tell camera who to talk to
+$me = $$;
+$SIG{'ALRM'} = \&goaway;
+
+# how many pixels?
+$pixCount = 0;
+$loadPixFlag = '';
+do {
+	$pixCount = -1 * scalar(@pixels)/2;
+	undef @pixels;
+	$loadPixFlag = 'load';
+} if scalar(@pixels);
+
+# here's the command to send to the camera!
+$what = "add $where $howmany $skip $when $pixCount $aoi $loadPixFlag";
+
+$| = 1;
+print "$now: adding collection: $what\n";
+#alarm 90;
+
+# create a message queue to get answers, get one for camera
+$msgOut = new IPC::Msg( $which, S_IRWXU|S_IRWXG|S_IRWXO);
+die "camera queue not accessible: $!\n" if !defined $msgOut;
+$msgIn = new IPC::Msg( $me, IPC_CREAT|S_IRWXU|S_IRWXG|S_IRWXO);
+die "I cannot create my back channel queue: $!\n" if !defined $msgIn;
+
+# send the command to the camera. Oh, if that were all I needed to do
+$msgOut->snd( 1, pack( "L a*", $me, $what ));
+
+# here we wait for immediate ok 
+$in = $msgIn->rcv( $buf, 256 );
+
+($code, $resp) = unpack( "L a*", $buf );
+print "$in: $code: $resp\n";
+do {
+	print "error from hotm $code, type $in\n";
+	print "answer was: $resp\n";
+	$msgIn->remove;
+	exit;
+} if $in != 1;
+
+do {
+	# now send the pixlist -- type 5
+	while( @pixels ) {
+		$end = @pixels>800? 800 : @pixels;
+		print "end is $end...\n";
+		$mess = pack( "L S*", $me, @pixels[ 0 .. $end-1 ] );
+		$msgOut->snd( 5, $mess );
+
+		$in = $msgIn->rcv( $buf, 256 );
+		($code, $resp) = unpack( "L a*", $buf );
+		print "$in: $code: $resp\n";
+		do {
+			print "error response from hotm $code, type $in\n";
+			print "answer was: $resp\n";
+			$msgIn->remove;
+			exit;
+		} if $in > 10;
+
+		@pixels = @pixels[ $end .. @pixels-1 ] if @pixels;
+	}
+
+	$msgOut->snd( 5, pack( "L", $me ));
+
+	$in = $msgIn->rcv( $buf, 256 );
+	($code, $resp) = unpack( "L a*", $buf );
+	print "$in: $code: $resp\n";
+	do {
+		print "error response from hotm $code, type $in\n";
+		print "answer was: $resp\n";
+		$msgIn->remove;
+		exit;
+	} if $in > 10;
+
+} if scalar(@pixels);
+
+# block until collection complete for data transfer timing
+#alarm 0;
+
+# wait for a response saying "done" from hotm
+$in = $msgIn->rcv( $buf, 256 );
+($code, $resp) = unpack( "L a*", $buf );
+do {
+      print "unknown response from hotm: $code $resp\n";
+      $msgIn->remove;
+      exit;
+} if $in != 2;
+
+# postprocess anything that ain't a stack
+do {
+	system("$postprocGigE $when.c$which.dump");
+	unlink( "$when.c$which.dump" );
+} if $aoi eq '' and -e "$when.c$which.dump";
+
+# compress them stacks
+system( "/bin/gzip $where" ) if $aoi ne '';
+
+# remove my own queue and go away
+$msgIn->remove;
+exit;
+ 
+sub goaway {
+	print "doCam dies due to alarm\n";
+	$msgIn->remove;
+	exit;
+}
+
+sub Usage {
+	print "Usage: doCam [flags] cameraNumber numFrames skipCount startTime [aoifile]\n";
+	print " where startTime is epoch, small (<10000 seconds) delay\n";
+	print "   or 'hour' or 'minute' to start on next hour or minute.\n";
+	print " flags: -ns == newstack format  -r == output raw \n";
+	exit;
+}

@@ -1,0 +1,22 @@
+# all common params
+#timeLimit: 20
+sitename: testfoo
+programVersIon: argus3.0
+camerasonbus: 5
+skip: 0
+#discard: 60
+debug: -1
+verbose: -1
+module: ./demon2
+dmaBuffers: 2
+diskVerbose: -1
+#module: show
+showmodulo: 1
+#module: focus
+#diskframes: 30
+cameraMTU: 1400
+interpacketdelay: 6250
+#interpacketdelay: 33250
+#cameraDelay: 80000000
+#cameraDelay: 0
+#useMultiShot: 1

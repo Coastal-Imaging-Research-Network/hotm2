@@ -1,0 +1,36 @@
+#! /usr/bin/perl
+
+use IPC::SysV qw(IPC_PRIVATE IPC_CREAT S_IRWXU S_IRWXG S_IRWXO);
+use IPC::Msg;
+
+$which = shift;
+$me = $$;
+$| = 1;
+$SIG{ALRM} = \&goaway;
+
+#print "sending @ARGV\n";
+
+alarm 10;
+
+$msgOut = new IPC::Msg( $which, S_IRWXU|S_IRWXG|S_IRWXO);
+die "sendmsg create destination: $!\n" if !defined $msgOut;
+$msgIn = new IPC::Msg( $me, IPC_CREAT|S_IRWXU|S_IRWXG|S_IRWXO);
+die "recvmsg create my queue: $!\n" if !defined $msgIn;
+
+$msgOut->snd( 1, pack( "L a*", $me, "@ARGV" ) );
+
+# here we wait for immediate ok 
+while(1) {
+	$in = $msgIn->rcv( $buf, 256 );
+	($code, $resp) = unpack( "L a*", $buf );
+	print "cam$which: $in: $resp\n";
+	last unless $in == 3;
+} 
+$msgIn->remove;
+exit;
+
+sub goaway {
+	print "dies due to alarm\n";
+	$msgIn->remove;
+	exit;
+}

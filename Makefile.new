@@ -1,0 +1,74 @@
+
+SOURCES = parseCommandLine.c \
+	loadCommandFile.c \
+	findCommand.c \
+	loadCameraModule.c \
+	appendList.c \
+	getBoolean.c \
+	getLong.c \
+	tagCommand.c \
+	dumpCommandFile.c \
+	getString.c \
+	commonCommand.c \
+	memory.c \
+	loadProcessModules.c \
+	processLoop.c \
+	saveResults.c \
+	modeToFormat.c \
+	whateverToRGB.c \
+	dc1394Decode.c \
+	message.c
+
+MODULESOURCES = savex.c \
+	mapUIDToPortAndNode.c \
+	mapCameraToUID.c \
+	framerateToDouble.c \
+	inserttext.c 
+	
+OBJECTS = ${SOURCES:.c=.o}
+
+MODULEOBJECTS = ${MODULESOURCES:.c=.o}
+
+INCLUDES = hotm.h
+
+LIBS = -ldl -lm
+
+MODULELIBS = -ldc1394_control -lraw1394 -ljpeg
+
+CC = gcc
+CFLAGS = -O -I/usr/local/include -L/usr/local/lib
+
+TARGETS = hotm default.camera.so timex.so snap.so stack.so hotmomma
+
+default: $(TARGETS)
+
+hotm: hotm.c $(INCLUDES) $(OBJECTS) 
+	$(CC) $(CFLAGS) -rdynamic -g -o hotm hotm.c $(OBJECTS) $(LIBS)
+	
+$(OBJECTS) : $(INCLUDES)
+
+default.camera.so : default.camera.c $(MODULEOBJECTS)
+	$(CC) -c default.camera.c
+	$(LD) $(MODULELIBS) -shared -o default.camera.so default.camera.o $(MODULEOBJECTS)
+	
+snap.so : snap.c hotm.h $(MODULEOBJECTS)
+	$(CC) -c snap.c
+	$(LD) $(MODULELIBS) -shared -o snap.so snap.o $(MODULEOBJECTS)
+	
+timex.so : timex.c hotm.h $(MODULEOBJECTS)
+	$(CC) -c timex.c
+	$(LD) $(MODULELIBS) -shared -o timex.so timex.o $(MODULEOBJECTS)
+	
+stack.so : stack.c rasterfile.h $(MODULEOBJECTS)
+	$(CC) -c stack.c
+	$(LD) $(MODULELIBS) -shared -o stack.so stack.o $(MODULEOBJECTS)
+	
+timexpix.so : timexpix.c $(MODULEOBJECTS)
+	$(CC) -c timexpix.c
+	$(LD) $(MODULELIBS) -shared -o timexpix.so timexpix.o $(MODULEOBJECTS)
+
+hotmomma : hotmomma.c message.c hotm.h
+	$(CC) -o hotmomma hotmomma.c message.c
+
+clean :
+	rm -f *.o *.so

@@ -1,0 +1,95 @@
+
+SOURCES = parseCommandLine.c \
+	loadCommandFile.c \
+	findCommand.c \
+	loadCameraModule.c \
+	appendList.c \
+	getBoolean.c \
+	getLong.c \
+	tagCommand.c \
+	dumpCommandFile.c \
+	getString.c \
+	commonCommand.c \
+	memory.c \
+	loadProcessModules.c \
+	processLoop.c \
+	saveResults.c \
+	modeToFormat.c \
+	whateverToRGB.c \
+	dc1394Decode.c \
+	message.c \
+	savex.c \
+	mapUIDToPortAndNode.c \
+	mapCameraToUID.c \
+	mapCameraNameToData.c \
+	framerateToDouble.c \
+	inserttext.c \
+	loadTimer.c \
+	alarm.c
+	
+OBJECTS = ${SOURCES:.c=.o}
+
+#MODULEOBJECTS = ${MODULESOURCES:.c=.o}
+MODULEOBJECTS = 
+
+INCLUDES = hotm.h alarm.h camera.h
+
+SDLLIBPATH = -L/usr/local/lib -lSDL
+
+LIBS = -ldl -lm -ldc1394_control -lraw1394 -ljpeg
+
+#MODULELIBS = -ldc1394_control -lraw1394 -ljpeg
+MODULELIBS = 
+
+CC = gcc
+CFLAGS = -g -I/usr/local/include -I/usr/local/include/SDL -L/usr/local/lib
+
+TARGETS = hotm default.camera.so timex.so snap.so stack.so hotmomma show.so xcdsx900.so timer.so sony.so
+
+default: $(TARGETS) 
+hotm: hotm.c $(INCLUDES) $(OBJECTS) 
+	$(CC) $(CFLAGS) -rdynamic -g -o hotm hotm.c $(OBJECTS) $(LIBS)
+	
+$(OBJECTS) : $(INCLUDES)
+
+default.camera.so : default.camera.c $(MODULEOBJECTS)
+	$(CC) -c default.camera.c
+	$(LD) $(MODULELIBS) -shared -o default.camera.so default.camera.o $(MODULEOBJECTS)
+
+sony.so : sony.c camera.h
+	$(CC) -c sony.c
+	$(LD) $(MODULELIBS) -shared -o sony.so sony.o
+
+xcdsx900.so : xcdsx900.c 
+	$(CC) -c xcdsx900.c
+	$(LD) $(MODULELIBS) -shared -o xcdsx900.so xcdsx900.o
+	
+snap.so : snap.c hotm.h $(MODULEOBJECTS)
+	$(CC) -c snap.c
+	$(LD) $(MODULELIBS) -shared -o snap.so snap.o $(MODULEOBJECTS)
+	
+timer.so : timer.c hotm.h $(MODULEOBJECTS)
+	$(CC) -c timer.c
+	$(LD) $(MODULELIBS) -shared -o timer.so timer.o $(MODULEOBJECTS)
+
+timex.so : timex.c hotm.h $(MODULEOBJECTS)
+	$(CC) -c timex.c
+	$(LD) $(MODULELIBS) -shared -o timex.so timex.o $(MODULEOBJECTS)
+	
+stack.so : stack.c hotm.h rasterfile.h $(MODULEOBJECTS)
+	$(CC) -c stack.c
+	$(LD) $(MODULELIBS) -shared -o stack.so stack.o $(MODULEOBJECTS)
+	
+timexpix.so : timexpix.c $(MODULEOBJECTS)
+	$(CC) -c timexpix.c
+	$(LD) $(MODULELIBS) -shared -o timexpix.so timexpix.o $(MODULEOBJECTS)
+
+show.so : show.o $(MODULEOBJECTS)
+	$(CC) $(CFLAGS) -c show.c 
+	$(LD) $(MODULELIBS) -shared -o show.so show.o $(MODULEOBJECTS) $(SDLLIBPATH) 
+
+hotmomma : hotmomma.c message.c hotm.h
+	$(CC) -o hotmomma hotmomma.c message.c
+
+clean :
+	rm -f *.o *.so

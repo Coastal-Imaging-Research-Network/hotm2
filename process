@@ -1,0 +1,6 @@
+#!/bin/sh
+
+nohup ./reqtimex.pl 2 600 &
+sleep 3
+nohup ./reqtimex.pl 3 600 &
+

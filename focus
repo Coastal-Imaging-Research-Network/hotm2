@@ -1,0 +1,20 @@
+sitename: testfoo
+programVersIon: argus2.0
+skip: 0
+debug: 0
+verbose: 0
+module: show
+module: focus
+cameraautosleep: 40
+cameramodule: sony
+cameraDebug: 0
+#cameraverbose: 0
+camerasharpness: 3
+#CameraVerbose: 132
+#CameraVerbose: 135 
+#cameraTrigger: TRIGGER_MODE_0
+cameraGain: -3
+#cameraGain: 2228
+cameraShutter: -3
+#cameraShutter: 2018
+cameraWhite Balance: -3
